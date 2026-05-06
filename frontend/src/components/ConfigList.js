@@ -30,7 +30,7 @@ export default function ConfigList({ configs, onNew, onEdit, onDelete, onRun }) 
 
       {configs.length === 0 && (
         <div className="empty-state card">
-          <p>No configurations yet. Create one to start practising!</p>
+          <p>No configurations yet. Create one to start practicing!</p>
         </div>
       )}
 
