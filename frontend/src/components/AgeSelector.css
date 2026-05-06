@@ -1,0 +1,116 @@
+.age-selector {
+  width: 100%;
+  max-width: 480px;
+  user-select: none;
+}
+
+.age-selector-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+/* ── Bar container ──────────────────────────────────────────────────────── */
+.age-bar {
+  position: relative;
+  height: 70px;
+  cursor: crosshair;
+  padding: 16px 0 28px;
+}
+
+.age-bar-disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+.age-bar-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 4px;
+  background: var(--border);
+  border-radius: 99px;
+}
+
+/* ── Distance span ──────────────────────────────────────────────────────── */
+.age-span {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 30px;
+  pointer-events: none;
+}
+
+/* ── Markers (guess & correct) ──────────────────────────────────────────── */
+.age-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.age-marker-line {
+  width: 2px;
+  flex: 1;
+}
+
+.age-marker-label {
+  position: absolute;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.age-marker-label-top {
+  top: 0;
+}
+
+.age-marker-label-bottom {
+  bottom: 0;
+}
+
+.marker-caption {
+  font-size: 0.65rem;
+}
+
+/* ── Tick marks ─────────────────────────────────────────────────────────── */
+.age-tick {
+  position: absolute;
+  top: 50%;
+  transform: translateX(-50%) translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.age-tick-mark {
+  width: 1px;
+  height: 10px;
+  background: var(--border);
+  margin-bottom: 2px;
+}
+
+.age-tick-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  position: absolute;
+  bottom: -18px;
+  transform: translateX(-50%);
+}
+
+/* ── End labels ──────────────────────────────────────────────────────────── */
+.age-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
