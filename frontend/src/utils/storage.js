@@ -6,12 +6,18 @@
 
 const STORAGE_KEY = "ageguesser_configs";
 
-/** Generate a simple UUID-like string. */
+/** Generate a cryptographically random UUID-like string. */
 export function generateId() {
-  return (
-    Math.random().toString(36).substring(2, 11) +
-    Math.random().toString(36).substring(2, 11)
-  );
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // Fallback for environments without crypto.randomUUID (e.g., http in older browsers)
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  arr[6] = (arr[6] & 0x0f) | 0x40; // version 4
+  arr[8] = (arr[8] & 0x3f) | 0x80; // variant
+  const hex = Array.from(arr).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** Load all configurations from localStorage. */

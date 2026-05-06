@@ -150,5 +150,10 @@ class TestImageEndpoint:
         assert response.status_code == 404
 
     def test_path_traversal_blocked(self, client):
-        response = client.get("/api/image/cropped/../../../etc/passwd")
+        # Path traversal with slashes is blocked by filename validation regex
+        response = client.get("/api/image/cropped/..%2F..%2Fetc%2Fpasswd")
         assert response.status_code in (403, 404)
+
+    def test_filename_with_special_chars_blocked(self, client):
+        response = client.get("/api/image/cropped/evil;cmd.jpg")
+        assert response.status_code == 403

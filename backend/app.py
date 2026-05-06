@@ -9,6 +9,7 @@ Dataset must be downloaded first:
 """
 
 import os
+import re
 import random
 import sys
 
@@ -143,20 +144,19 @@ def _register_routes(app):
     def health():
         return jsonify({"status": "ok"})
 
-    @app.route("/api/image/<dataset>/<path:filename>")
+    @app.route("/api/image/<dataset>/<filename>")
     def get_image(dataset, filename):
         """Serve a single image file from the dataset."""
         if dataset not in DATASET_DIRS:
             return jsonify({"error": "Unknown dataset"}), 404
 
+        # Validate filename: only allow the characters found in UTKFace filenames
+        # (digits, letters, underscores, hyphens, dots) and no directory separators.
+        if not re.fullmatch(r"[A-Za-z0-9._\-]+", filename):
+            return jsonify({"error": "Forbidden"}), 403
+
         directory = DATASET_DIRS[dataset]
         filepath = os.path.join(directory, filename)
-
-        # Prevent path traversal
-        real_filepath = os.path.realpath(filepath)
-        real_directory = os.path.realpath(directory)
-        if not real_filepath.startswith(real_directory + os.sep):
-            return jsonify({"error": "Forbidden"}), 403
 
         if not os.path.isfile(filepath):
             return jsonify({"error": "Image not found"}), 404
@@ -228,4 +228,4 @@ def _register_routes(app):
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=os.environ.get("FLASK_DEBUG", "0") == "1")
