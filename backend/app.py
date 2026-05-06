@@ -150,18 +150,20 @@ def _register_routes(app):
         if dataset not in DATASET_DIRS:
             return jsonify({"error": "Unknown dataset"}), 404
 
-        # Validate filename: only allow the characters found in UTKFace filenames
-        # (digits, letters, underscores, hyphens, dots) and no directory separators.
+        # Quick pre-validation: reject filenames with unsafe characters.
         if not re.fullmatch(r"[A-Za-z0-9._\-]+", filename):
             return jsonify({"error": "Forbidden"}), 403
 
         directory = DATASET_DIRS[dataset]
-        filepath = os.path.join(directory, filename)
 
-        if not os.path.isfile(filepath):
-            return jsonify({"error": "Image not found"}), 404
+        # Look up the file by listing the directory.  We intentionally use the
+        # filesystem-sourced name (known_filename) in the path construction –
+        # not the user-supplied value – so that path injection is impossible.
+        for known_filename in _list_images(directory):
+            if known_filename == filename:
+                return send_file(os.path.join(directory, known_filename))
 
-        return send_file(filepath)
+        return jsonify({"error": "Image not found"}), 404
 
     @app.route("/api/random")
     def get_random():
