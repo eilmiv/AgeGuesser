@@ -220,7 +220,9 @@ class TestDownloadCli:
             patch("manage._extract_archive") as mock_extract:
             result = runner.invoke(cli, ["download", "--datasets", "cropped"])
             assert result.exit_code == 0
-            assert mock_download.call_count == 1
+            mock_download.assert_called_once()
+            downloaded_name = Path(mock_download.call_args.args[1]).name
+            assert downloaded_name == "cropped_faces.tar.gz"
 
     def test_download_wild_calls_gdown(self, runner, tmp_path):
         with patch.object(manage, "DATA_DIR", tmp_path), \
@@ -233,6 +235,10 @@ class TestDownloadCli:
             result = runner.invoke(cli, ["download", "--datasets", "wild"])
             assert result.exit_code == 0
             assert mock_download.call_count == len(manage.WILD_PARTS)
+            downloaded_names = {
+                Path(call.args[1]).name for call in mock_download.call_args_list
+            }
+            assert downloaded_names == {name for _, name in manage.WILD_PARTS}
 
     def test_download_both_datasets_calls_gdown_for_all(self, runner, tmp_path):
         with patch.object(manage, "DATA_DIR", tmp_path), \

@@ -24,6 +24,10 @@ DATA_DIR: Path = BASE_DIR / "data"
 #
 # The UTKFace dataset is hosted on Google Drive.  The file IDs below are from
 # the official dataset page: https://susanqq.github.io/UTKFace/
+#
+# Mapping overview used by this module:
+# - dataset "cropped" -> CROPPED_ARCHIVE (single archive download)
+# - dataset "wild"    -> WILD_PARTS (three-part archive download)
 # ---------------------------------------------------------------------------
 
 WILD_PARTS: list[tuple[str, str]] = [
@@ -36,9 +40,9 @@ WILD_PARTS: list[tuple[str, str]] = [
 
 CROPPED_ARCHIVE: tuple[str, str] = (
     # ID sourced from the official UTKFace dataset page.
-    # Upstream archive filename includes "_wild" even when used for cropped set.
+    # We use a local filename aligned with the target dataset to avoid confusion.
     "1W-vm-rgSDsPA015wQQ9vWzquR_KvgBwe",
-    "UTKFace_wild.tar.gz",
+    "cropped_faces.tar.gz",
 )
 
 DATASET_DIRS: dict[str, Path] = {
