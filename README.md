@@ -92,7 +92,7 @@ Returns a random image matching the given criteria.
 | `max_age` | int | 116 | Maximum age (inclusive) |
 | `genders` | comma-sep ints | 0,1 | Genders to include |
 | `races` | comma-sep ints | 0,1,2,3,4 | Races to include |
-| `resolutions` | comma-sep strings | low,medium,high | Resolutions to include (`low` < 100 px, `medium` 100–200 px, `high` > 200 px) |
+| `resolutions` | comma-sep strings | low,medium,high | Resolutions to include (`low` < 100 px, `medium` 100–300 px, `high` > 300 px) |
 | `datasets` | comma-sep strings | cropped,wild | Datasets to include |
 
 **Example response:**
