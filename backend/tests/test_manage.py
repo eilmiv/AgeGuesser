@@ -187,7 +187,7 @@ class TestFixSwappedDatasetDirs:
         assert (cropped_dir / "30_1_2_date.jpg.chip.jpg").exists()
         assert (wild_dir / "25_0_0_date.jpg").exists()
 
-    def test_does_not_swap_when_dirs_already_match_expected_content(self, tmp_path):
+    def test_does_not_swap_when_dirs_already_match_heuristic_expectation(self, tmp_path):
         cropped_dir = tmp_path / "UTKFace"
         wild_dir = tmp_path / "in-the-wild"
         cropped_dir.mkdir()

@@ -172,9 +172,9 @@ def _extract_archive(archive_path: Path, dest_dir: Path) -> None:
 
 def _looks_like_cropped(directory: Path, sample_size: int = 50) -> bool:
     """
-    Heuristic for aligned/cropped UTKFace files.
+    Heuristic for aligned/cropped UTKFace files downloaded by this project.
 
-    The cropped split commonly contains names like `...jpg.chip.jpg`.
+    The aligned/cropped archives commonly contain names like `...jpg.chip.jpg`.
     """
     valid_exts = {".jpg", ".jpeg", ".png"}
     checked = 0
@@ -213,7 +213,7 @@ def _fix_swapped_dataset_dirs() -> None:
         cropped_dir.rename(tmp_dir)
         wild_dir.rename(cropped_dir)
         tmp_dir.rename(wild_dir)
-    except Exception:
+    except OSError:
         if cropped_dir.exists() and tmp_dir.exists() and not wild_dir.exists():
             cropped_dir.rename(wild_dir)
             tmp_dir.rename(cropped_dir)
