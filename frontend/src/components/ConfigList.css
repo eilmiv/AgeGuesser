@@ -1,0 +1,108 @@
+.config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.config-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.config-list-header h2 {
+  font-size: 1.4rem;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px;
+}
+
+.config-card {
+  transition: box-shadow 0.15s;
+}
+
+.config-card:hover {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+}
+
+.config-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.config-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.config-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.config-meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.config-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expand-arrow {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  min-width: 14px;
+  text-align: center;
+}
+
+.config-card-body {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.config-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-row {
+  display: flex;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.detail-label {
+  font-weight: 600;
+  min-width: 70px;
+  color: var(--text-muted);
+}
+
+.config-history h4 {
+  margin-bottom: 8px;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.no-history {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
