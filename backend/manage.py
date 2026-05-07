@@ -209,9 +209,14 @@ def _fix_swapped_dataset_dirs() -> None:
         return
 
     tmp_dir = DATA_DIR / f"_tmp_dataset_swap_{uuid4().hex}"
-    cropped_dir.rename(tmp_dir)
-    wild_dir.rename(cropped_dir)
-    tmp_dir.rename(wild_dir)
+    try:
+        cropped_dir.rename(tmp_dir)
+        wild_dir.rename(cropped_dir)
+        tmp_dir.rename(wild_dir)
+    except Exception:
+        if tmp_dir.exists() and not cropped_dir.exists():
+            tmp_dir.rename(cropped_dir)
+        raise
     click.echo("  Detected swapped datasets, fixed directory mapping automatically.")
 
 

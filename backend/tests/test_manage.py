@@ -176,8 +176,8 @@ class TestFixSwappedDatasetDirs:
         cropped_dir.mkdir()
         wild_dir.mkdir()
 
-        (cropped_dir / "25_0_0_date.jpg").write_text("wild-like")
-        (wild_dir / "30_1_2_date.jpg.chip.jpg").write_text("cropped-like")
+        (cropped_dir / "25_0_0_date.jpg").write_text("")
+        (wild_dir / "30_1_2_date.jpg.chip.jpg").write_text("")
 
         with patch.object(manage, "DATA_DIR", tmp_path), patch.object(
             manage, "DATASET_DIRS", {"cropped": cropped_dir, "wild": wild_dir}
@@ -193,8 +193,8 @@ class TestFixSwappedDatasetDirs:
         cropped_dir.mkdir()
         wild_dir.mkdir()
 
-        (cropped_dir / "30_1_2_date.jpg.chip.jpg").write_text("cropped-like")
-        (wild_dir / "25_0_0_date.jpg").write_text("wild-like")
+        (cropped_dir / "30_1_2_date.jpg.chip.jpg").write_text("")
+        (wild_dir / "25_0_0_date.jpg").write_text("")
 
         with patch.object(manage, "DATA_DIR", tmp_path), patch.object(
             manage, "DATASET_DIRS", {"cropped": cropped_dir, "wild": wild_dir}
