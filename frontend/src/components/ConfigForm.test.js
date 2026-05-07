@@ -84,6 +84,13 @@ describe("ConfigForm rendering", () => {
     expect(screen.getByLabelText("In-the-wild faces")).toBeInTheDocument();
   });
 
+  it("renders resolution checkboxes", () => {
+    renderForm();
+    expect(screen.getByLabelText("Low")).toBeInTheDocument();
+    expect(screen.getByLabelText("Medium")).toBeInTheDocument();
+    expect(screen.getByLabelText("High")).toBeInTheDocument();
+  });
+
   it("renders Save and Cancel buttons", () => {
     renderForm();
     expect(screen.getByRole("button", { name: /save/i })).toBeInTheDocument();
@@ -144,6 +151,15 @@ describe("ConfigForm validation", () => {
     expect(screen.getByText(/select at least one dataset/i)).toBeInTheDocument();
   });
 
+  it("shows error when no resolution is selected", () => {
+    renderForm();
+    userEvent.click(screen.getByLabelText("Low"));
+    userEvent.click(screen.getByLabelText("Medium"));
+    userEvent.click(screen.getByLabelText("High"));
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    expect(screen.getByText(/select at least one resolution/i)).toBeInTheDocument();
+  });
+
   it("clears field error when field is corrected", () => {
     renderForm();
     const nameInput = screen.getByPlaceholderText(/e\.g\. Young adults/i);
@@ -170,6 +186,7 @@ describe("ConfigForm submission", () => {
     expect(saved.history).toEqual([]);
     expect(Array.isArray(saved.genders)).toBe(true);
     expect(Array.isArray(saved.races)).toBe(true);
+    expect(Array.isArray(saved.resolutions)).toBe(true);
   });
 
   it("calls onSave with updated name", () => {
@@ -192,6 +209,7 @@ describe("ConfigForm submission", () => {
       maxAge: 80,
       genders: [0, 1],
       races: [0, 1, 2, 3, 4],
+      resolutions: ["medium", "high"],
       datasets: ["cropped"],
       history: [{ date: "2024-01-01", avgDistance: 5 }],
     };
@@ -200,6 +218,27 @@ describe("ConfigForm submission", () => {
     const saved = onSave.mock.calls[0][0];
     expect(saved.id).toBe("existing-id");
     expect(saved.history).toEqual(initial.history);
+    expect(saved.resolutions).toEqual(["medium", "high"]);
+  });
+
+  it("fills default resolutions for old config without resolutions field", () => {
+    const onSave = jest.fn();
+    const initial = {
+      id: "old-id",
+      name: "Old Config",
+      facesPerRun: 5,
+      minAge: 0,
+      maxAge: 80,
+      genders: [0, 1],
+      races: [0, 1, 2, 3, 4],
+      datasets: ["cropped"],
+      history: [],
+      // no resolutions field
+    };
+    renderForm({ initial, onSave });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    const saved = onSave.mock.calls[0][0];
+    expect(saved.resolutions).toEqual(["low", "medium", "high"]);
   });
 
   it("does not call onSave when form is invalid", () => {
@@ -254,5 +293,15 @@ describe("ConfigForm checkbox toggles", () => {
     expect(croppedCheckbox).toBeChecked();
     userEvent.click(croppedCheckbox);
     expect(croppedCheckbox).not.toBeChecked();
+  });
+
+  it("toggling a resolution checkbox updates selection", () => {
+    renderForm();
+    const lowCheckbox = screen.getByLabelText("Low");
+    expect(lowCheckbox).toBeChecked();
+    userEvent.click(lowCheckbox);
+    expect(lowCheckbox).not.toBeChecked();
+    userEvent.click(lowCheckbox);
+    expect(lowCheckbox).toBeChecked();
   });
 });

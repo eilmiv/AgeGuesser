@@ -2,7 +2,7 @@
 AgeGuesser Flask backend.
 
 Serves face images from the UTKFace dataset and provides a random-image
-selection endpoint filtered by age, gender, race and dataset type.
+selection endpoint filtered by age, gender, race, resolution and dataset type.
 
 Dataset must be downloaded first:
     python manage.py download
@@ -18,6 +18,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, send_file, request
 from flask_cors import CORS
+from PIL import Image
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -106,11 +107,54 @@ def _parse_filename(filename: str) -> dict[str, int] | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Resolution helpers
+# ---------------------------------------------------------------------------
+
+# Pixel threshold (smaller image dimension) that separates resolution classes.
+_RESOLUTION_HIGH_THRESHOLD: int = 300
+_RESOLUTION_LOW_THRESHOLD: int = 100
+
+# Module-level cache: absolute path -> resolution label
+_resolution_cache: dict[Path, str] = {}
+
+
+def _classify_resolution(width: int, height: int) -> str:
+    """Classify an image into 'low', 'medium', or 'high' based on its dimensions."""
+    smaller = min(width, height)
+    if smaller > _RESOLUTION_HIGH_THRESHOLD:
+        return "high"
+    if smaller >= _RESOLUTION_LOW_THRESHOLD:
+        return "medium"
+    return "low"
+
+
+def _get_image_resolution(path: Path) -> str:
+    """
+    Return the resolution class ('low', 'medium', or 'high') for the image at
+    *path*, reading dimensions via Pillow.  Results are cached in memory so
+    each file is read at most once per process.
+    """
+    cached = _resolution_cache.get(path)
+    if cached is not None:
+        return cached
+
+    try:
+        with Image.open(path) as img:
+            width, height = img.size
+        result = _classify_resolution(width, height)
+    except Exception:
+        result = "medium"  # fallback for unreadable images
+
+    _resolution_cache[path] = result
+    return result
+
+
 def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
     """
     Build an in-memory list of all matching images across the requested
     datasets.  Returns a list of dicts with keys: dataset, filename, age,
-    gender, race.
+    gender, race, resolution.
     """
     index: list[dict[str, str | int]] = []
     for ds in datasets:
@@ -121,6 +165,7 @@ def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
             meta = _parse_filename(filename)
             if meta is None:
                 continue
+            resolution = _get_image_resolution(directory / filename)
             index.append(
                 {
                     "dataset": ds,
@@ -128,6 +173,7 @@ def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
                     "age": meta["age"],
                     "gender": meta["gender"],
                     "race": meta["race"],
+                    "resolution": resolution,
                 }
             )
     return index
@@ -171,11 +217,12 @@ def _register_routes(app: Flask) -> None:
         Return a random image matching the given filter criteria.
 
         Query parameters:
-            min_age   (int, default 0)
-            max_age   (int, default 116)
-            genders   (comma-separated ints, default 0,1)
-            races     (comma-separated ints, default 0,1,2,3,4)
-            datasets  (comma-separated strings, default cropped,wild)
+            min_age      (int, default 0)
+            max_age      (int, default 116)
+            genders      (comma-separated ints, default 0,1)
+            races        (comma-separated ints, default 0,1,2,3,4)
+            resolutions  (comma-separated strings, default low,medium,high)
+            datasets     (comma-separated strings, default cropped,wild)
         """
         try:
             min_age = int(request.args.get("min_age", 0))
@@ -185,6 +232,7 @@ def _register_routes(app: Flask) -> None:
 
         genders_raw = request.args.get("genders", "0,1")
         races_raw = request.args.get("races", "0,1,2,3,4")
+        resolutions_raw = request.args.get("resolutions", "low,medium,high")
         datasets_raw = request.args.get("datasets", "cropped,wild")
 
         try:
@@ -192,6 +240,10 @@ def _register_routes(app: Flask) -> None:
             races = [int(r) for r in races_raw.split(",") if r.strip()]
         except ValueError:
             return jsonify({"error": "genders and races must be comma-separated integers"}), 400
+
+        resolutions = [r.strip() for r in resolutions_raw.split(",") if r.strip()]
+        if not resolutions:
+            return jsonify({"error": "At least one resolution must be specified"}), 400
 
         datasets = [d.strip() for d in datasets_raw.split(",") if d.strip()]
         if not datasets:
@@ -205,6 +257,7 @@ def _register_routes(app: Flask) -> None:
             if (min_age <= img["age"] <= max_age)
             and (img["gender"] in genders)
             and (img["race"] in races)
+            and (img["resolution"] in resolutions)
         ]
 
         if not candidates:
@@ -218,6 +271,7 @@ def _register_routes(app: Flask) -> None:
                 "age": chosen["age"],
                 "gender": chosen["gender"],
                 "race": chosen["race"],
+                "resolution": chosen["resolution"],
                 "url": f"/api/image/{chosen['dataset']}/{chosen['filename']}",
             }
         )

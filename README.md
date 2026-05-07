@@ -16,7 +16,7 @@ It uses the [UTKFace](https://susanqq.github.io/UTKFace/) dataset (both aligned/
 - **Dataset management command** – downloads and prepares the UTKFace dataset (cropped + in-the-wild)
 - **Startup warning** – clear error message with instructions when the dataset has not been downloaded yet
 - **`GET /api/image/<dataset>/<filename>`** – serve a single face image
-- **`GET /api/random`** – pick a random image matching age range, gender, race and dataset filters
+- **`GET /api/random`** – pick a random image matching age range, gender, race, resolution and dataset filters
 
 ### Frontend
 - **All state stored in the browser** (`localStorage`) – no account or database needed
@@ -92,6 +92,7 @@ Returns a random image matching the given criteria.
 | `max_age` | int | 116 | Maximum age (inclusive) |
 | `genders` | comma-sep ints | 0,1 | Genders to include |
 | `races` | comma-sep ints | 0,1,2,3,4 | Races to include |
+| `resolutions` | comma-sep strings | low,medium,high | Resolutions to include (`low` < 100 px, `medium` 100–300 px, `high` > 300 px) |
 | `datasets` | comma-sep strings | cropped,wild | Datasets to include |
 
 **Example response:**
@@ -102,6 +103,7 @@ Returns a random image matching the given criteria.
   "age": 28,
   "gender": 0,
   "race": 2,
+  "resolution": "medium",
   "url": "/api/image/cropped/28_0_2_20170110183900092.jpg"
 }
 ```

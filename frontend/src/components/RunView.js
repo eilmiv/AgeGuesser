@@ -45,6 +45,7 @@ export default function RunView({ config, onComplete }) {
       max_age: config.maxAge,
       genders: config.genders.join(","),
       races: config.races.join(","),
+      resolutions: (config.resolutions ?? ["low", "medium", "high"]).join(","),
       datasets: config.datasets.join(","),
     });
 

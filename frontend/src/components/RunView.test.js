@@ -19,6 +19,7 @@ function makeConfig(overrides = {}) {
     maxAge: 100,
     genders: [0, 1],
     races: [0, 1, 2, 3, 4],
+    resolutions: ["low", "medium", "high"],
     datasets: ["cropped"],
     ...overrides,
   };
