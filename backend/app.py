@@ -8,10 +8,13 @@ Dataset must be downloaded first:
     python manage.py download
 """
 
+from __future__ import annotations
+
 import os
 import re
 import random
 import sys
+from pathlib import Path
 
 from flask import Flask, jsonify, send_file, request
 from flask_cors import CORS
@@ -20,11 +23,11 @@ from flask_cors import CORS
 # Paths
 # ---------------------------------------------------------------------------
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-DATASET_DIRS = {
-    "cropped": os.path.join(DATA_DIR, "UTKFace"),
-    "wild": os.path.join(DATA_DIR, "in-the-wild"),
+BASE_DIR: Path = Path(__file__).resolve().parent
+DATA_DIR: Path = BASE_DIR / "data"
+DATASET_DIRS: dict[str, Path] = {
+    "cropped": DATA_DIR / "UTKFace",
+    "wild": DATA_DIR / "in-the-wild",
 }
 
 # ---------------------------------------------------------------------------
@@ -32,7 +35,7 @@ DATASET_DIRS = {
 # ---------------------------------------------------------------------------
 
 
-def create_app():
+def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app)
 
@@ -45,18 +48,15 @@ def create_app():
 # Dataset helpers
 # ---------------------------------------------------------------------------
 
-VALID_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+VALID_IMAGE_EXTENSIONS: set[str] = {".jpg", ".jpeg", ".png"}
 
 
-def _check_dataset():
+def _check_dataset() -> None:
     """Warn on startup if no dataset images are found."""
-    found = False
-    for dataset_name, dataset_path in DATASET_DIRS.items():
-        if os.path.isdir(dataset_path):
-            images = _list_images(dataset_path)
-            if images:
-                found = True
-                break
+    found = any(
+        path.is_dir() and bool(_list_images(path))
+        for path in DATASET_DIRS.values()
+    )
 
     if not found:
         print(
@@ -64,37 +64,37 @@ def _check_dataset():
             "╔══════════════════════════════════════════════════════════╗\n"
             "║  WARNING: UTKFace dataset not found!                     ║\n"
             "║                                                          ║\n"
-            "║  Download and prepare the dataset by running:           ║\n"
+            "║  Download and prepare the dataset by running:            ║\n"
             "║                                                          ║\n"
             "║      python manage.py download                           ║\n"
             "║                                                          ║\n"
-            "║  The API will return 503 until images are available.    ║\n"
+            "║  /api/random returns 404 until images are available.     ║\n"
             "╚══════════════════════════════════════════════════════════╝\n",
             file=sys.stderr,
         )
 
 
-def _list_images(directory):
+def _list_images(directory: Path) -> list[str]:
     """Return a list of image filenames in *directory*."""
     try:
         return [
-            f
-            for f in os.listdir(directory)
-            if os.path.splitext(f)[1].lower() in VALID_IMAGE_EXTENSIONS
+            entry.name
+            for entry in directory.iterdir()
+            if entry.suffix.lower() in VALID_IMAGE_EXTENSIONS
         ]
     except OSError:
         return []
 
 
-def _parse_filename(filename):
+def _parse_filename(filename: str) -> dict[str, int] | None:
     """
     Parse a UTKFace filename into age, gender, race.
 
     Filename format: [age]_[gender]_[race]_[date&time].jpg
     Returns None if the filename cannot be parsed.
     """
-    basename = os.path.splitext(filename)[0]
-    parts = basename.split("_")
+    stem = Path(filename).stem
+    parts = stem.split("_")
     if len(parts) < 3:
         return None
     try:
@@ -106,16 +106,16 @@ def _parse_filename(filename):
         return None
 
 
-def _build_image_index(datasets):
+def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
     """
     Build an in-memory list of all matching images across the requested
     datasets.  Returns a list of dicts with keys: dataset, filename, age,
     gender, race.
     """
-    index = []
+    index: list[dict[str, str | int]] = []
     for ds in datasets:
         directory = DATASET_DIRS.get(ds)
-        if not directory or not os.path.isdir(directory):
+        if directory is None or not directory.is_dir():
             continue
         for filename in _list_images(directory):
             meta = _parse_filename(filename)
@@ -138,14 +138,14 @@ def _build_image_index(datasets):
 # ---------------------------------------------------------------------------
 
 
-def _register_routes(app):
+def _register_routes(app: Flask) -> None:
 
     @app.route("/api/health")
     def health():
         return jsonify({"status": "ok"})
 
     @app.route("/api/image/<dataset>/<filename>")
-    def get_image(dataset, filename):
+    def get_image(dataset: str, filename: str):
         """Serve a single image file from the dataset."""
         if dataset not in DATASET_DIRS:
             return jsonify({"error": "Unknown dataset"}), 404
@@ -161,7 +161,7 @@ def _register_routes(app):
         # not the user-supplied value – so that path injection is impossible.
         for known_filename in _list_images(directory):
             if known_filename == filename:
-                return send_file(os.path.join(directory, known_filename))
+                return send_file(directory / known_filename)
 
         return jsonify({"error": "Image not found"}), 404
 

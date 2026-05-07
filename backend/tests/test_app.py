@@ -2,9 +2,8 @@
 Tests for the AgeGuesser Flask backend.
 """
 
-import os
-import shutil
 import pytest
+from pathlib import Path
 from app import create_app, _parse_filename, _list_images, _build_image_index
 
 
@@ -34,9 +33,9 @@ def app(tmp_path):
     original_data_dir = app_module.DATA_DIR
     original_dataset_dirs = app_module.DATASET_DIRS.copy()
 
-    app_module.DATA_DIR = str(tmp_path)
-    app_module.DATASET_DIRS["cropped"] = str(cropped_dir)
-    app_module.DATASET_DIRS["wild"] = str(tmp_path / "in-the-wild")
+    app_module.DATA_DIR = tmp_path
+    app_module.DATASET_DIRS["cropped"] = cropped_dir
+    app_module.DATASET_DIRS["wild"] = tmp_path / "in-the-wild"
 
     flask_app = create_app()
     flask_app.config["TESTING"] = True
@@ -73,9 +72,9 @@ def app_with_wild(tmp_path):
     original_data_dir = app_module.DATA_DIR
     original_dataset_dirs = app_module.DATASET_DIRS.copy()
 
-    app_module.DATA_DIR = str(tmp_path)
-    app_module.DATASET_DIRS["cropped"] = str(cropped_dir)
-    app_module.DATASET_DIRS["wild"] = str(wild_dir)
+    app_module.DATA_DIR = tmp_path
+    app_module.DATASET_DIRS["cropped"] = cropped_dir
+    app_module.DATASET_DIRS["wild"] = wild_dir
 
     flask_app = create_app()
     flask_app.config["TESTING"] = True
@@ -145,7 +144,7 @@ class TestListImages:
         (tmp_path / "1_0_0_date.jpg").write_text("")
         (tmp_path / "2_1_1_date.png").write_text("")
         (tmp_path / "readme.txt").write_text("")
-        images = _list_images(str(tmp_path))
+        images = _list_images(tmp_path)
         assert sorted(images) == ["1_0_0_date.jpg", "2_1_1_date.png"]
 
     def test_returns_only_images(self, tmp_path):
@@ -154,19 +153,19 @@ class TestListImages:
         (tmp_path / "face.png").write_text("")
         (tmp_path / "data.csv").write_text("")
         (tmp_path / "notes.md").write_text("")
-        images = sorted(_list_images(str(tmp_path)))
+        images = sorted(_list_images(tmp_path))
         assert images == ["face.jpeg", "face.jpg", "face.png"]
 
     def test_empty_directory(self, tmp_path):
-        assert _list_images(str(tmp_path)) == []
+        assert _list_images(tmp_path) == []
 
     def test_returns_empty_for_missing_dir(self):
-        assert _list_images("/nonexistent/path") == []
+        assert _list_images(Path("/nonexistent/path")) == []
 
     def test_case_insensitive_extension(self, tmp_path):
         (tmp_path / "face.JPG").write_text("")
         (tmp_path / "face2.JPEG").write_text("")
-        images = _list_images(str(tmp_path))
+        images = _list_images(tmp_path)
         assert len(images) == 2
 
 
@@ -184,8 +183,8 @@ class TestBuildImageIndex:
         (cropped_dir / "25_0_2_date.jpg").write_text("")
         (cropped_dir / "30_1_0_date.jpg").write_text("")
 
-        app_module.DATASET_DIRS["cropped"] = str(cropped_dir)
-        app_module.DATASET_DIRS["wild"] = str(tmp_path / "nonexistent")
+        app_module.DATASET_DIRS["cropped"] = cropped_dir
+        app_module.DATASET_DIRS["wild"] = tmp_path / "nonexistent"
 
         try:
             index = _build_image_index(["cropped"])
@@ -207,8 +206,8 @@ class TestBuildImageIndex:
         (cropped_dir / "20_0_0_date.jpg").write_text("")
         (wild_dir / "50_1_2_date.jpg").write_text("")
 
-        app_module.DATASET_DIRS["cropped"] = str(cropped_dir)
-        app_module.DATASET_DIRS["wild"] = str(wild_dir)
+        app_module.DATASET_DIRS["cropped"] = cropped_dir
+        app_module.DATASET_DIRS["wild"] = wild_dir
 
         try:
             index = _build_image_index(["cropped", "wild"])
@@ -222,7 +221,7 @@ class TestBuildImageIndex:
         import app as app_module
         original = app_module.DATASET_DIRS.copy()
 
-        app_module.DATASET_DIRS["wild"] = str(tmp_path / "nonexistent")
+        app_module.DATASET_DIRS["wild"] = tmp_path / "nonexistent"
 
         try:
             index = _build_image_index(["wild"])
@@ -240,7 +239,7 @@ class TestBuildImageIndex:
         (cropped_dir / "bad_name.jpg").write_text("")
         (cropped_dir / "also_bad.jpg").write_text("")
 
-        app_module.DATASET_DIRS["cropped"] = str(cropped_dir)
+        app_module.DATASET_DIRS["cropped"] = cropped_dir
 
         try:
             index = _build_image_index(["cropped"])
