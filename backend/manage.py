@@ -26,16 +26,17 @@ DATA_DIR: Path = BASE_DIR / "data"
 # the official dataset page: https://susanqq.github.io/UTKFace/
 # ---------------------------------------------------------------------------
 
-CROPPED_PARTS: list[tuple[str, str]] = [
-    # part1, part2, part3 of the aligned & cropped faces
+WILD_PARTS: list[tuple[str, str]] = [
+    # part1, part2, part3 archive set (in-the-wild faces)
     # IDs sourced from the official UTKFace dataset page
     ("1mb5Z24TsnKI3ygNIlX6ZFiwUj0_PmpAW", "part1.tar.gz"),
     ("19vdaXVRtkP-nyxz1MYwXiFsh_m_OL72b", "part2.tar.gz"),
     ("1oj9ZWsLV2-k2idoW_nRSrLQLUP3hus3b", "part3.tar.gz"),
 ]
 
-WILD_ARCHIVE: tuple[str, str] = (
-    # ID sourced from the official UTKFace dataset page
+CROPPED_ARCHIVE: tuple[str, str] = (
+    # ID sourced from the official UTKFace dataset page.
+    # Upstream archive filename includes "_wild" even when used for cropped set.
     "1W-vm-rgSDsPA015wQQ9vWzquR_KvgBwe",
     "UTKFace_wild.tar.gz",
 )
@@ -102,7 +103,7 @@ def _download_cropped() -> None:
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        file_id, archive_name = WILD_ARCHIVE
+        file_id, archive_name = CROPPED_ARCHIVE
         archive_path = tmp_dir / archive_name
         if archive_path.exists():
             click.echo(f"  {archive_name} already downloaded, skipping.")
@@ -130,7 +131,7 @@ def _download_wild() -> None:
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        for file_id, archive_name in CROPPED_PARTS:
+        for file_id, archive_name in WILD_PARTS:
             archive_path = tmp_dir / archive_name
             if archive_path.exists():
                 click.echo(f"  {archive_name} already downloaded, skipping.")

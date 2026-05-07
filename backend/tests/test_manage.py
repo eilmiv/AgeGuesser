@@ -232,7 +232,7 @@ class TestDownloadCli:
             patch("manage._extract_archive") as mock_extract:
             result = runner.invoke(cli, ["download", "--datasets", "wild"])
             assert result.exit_code == 0
-            assert mock_download.call_count == len(manage.CROPPED_PARTS)
+            assert mock_download.call_count == len(manage.WILD_PARTS)
 
     def test_download_both_datasets_calls_gdown_for_all(self, runner, tmp_path):
         with patch.object(manage, "DATA_DIR", tmp_path), \
@@ -244,8 +244,8 @@ class TestDownloadCli:
              patch("manage._extract_archive") as mock_extract:
             result = runner.invoke(cli, ["download", "--datasets", "cropped,wild"])
             assert result.exit_code == 0
-            # cropped has 3 parts + wild has 1 = 4 total
-            assert mock_download.call_count == len(manage.CROPPED_PARTS) + 1
+            # cropped has 1 archive + wild has 3 parts = 4 total
+            assert mock_download.call_count == len(manage.WILD_PARTS) + 1
 
     def test_download_skips_already_downloaded_archive(self, runner, tmp_path):
         """If dataset images already exist, download should be skipped."""
