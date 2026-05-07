@@ -214,7 +214,10 @@ def _fix_swapped_dataset_dirs() -> None:
         wild_dir.rename(cropped_dir)
         tmp_dir.rename(wild_dir)
     except Exception:
-        if tmp_dir.exists() and not cropped_dir.exists():
+        if cropped_dir.exists() and tmp_dir.exists() and not wild_dir.exists():
+            cropped_dir.rename(wild_dir)
+            tmp_dir.rename(cropped_dir)
+        elif tmp_dir.exists() and not cropped_dir.exists():
             tmp_dir.rename(cropped_dir)
         raise
     click.echo("  Detected swapped datasets, fixed directory mapping automatically.")
