@@ -4,7 +4,21 @@ Tests for the AgeGuesser Flask backend.
 
 import pytest
 from pathlib import Path
-from app import create_app, _parse_filename, _list_images, _build_image_index
+from PIL import Image as PILImage
+from app import (
+    create_app,
+    _parse_filename,
+    _list_images,
+    _build_image_index,
+    _classify_resolution,
+    _get_image_resolution,
+    _parse_filter_params,
+    _filter_candidates,
+    _BadAgeParams,
+    _BadGenderRaceParams,
+    _EmptyResolutions,
+    _EmptyDatasets,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +107,47 @@ def client(app):
 @pytest.fixture
 def client_with_wild(app_with_wild):
     return app_with_wild.test_client()
+
+
+def _make_image(path: Path, width: int, height: int) -> None:
+    """Create a minimal valid PNG image with the given dimensions."""
+    img = PILImage.new("RGB", (width, height), color=(128, 128, 128))
+    img.save(path, format="PNG")
+
+
+@pytest.fixture
+def app_with_resolutions(tmp_path):
+    """Flask app with images of varying resolutions (low, medium, high)."""
+    cropped_dir = tmp_path / "UTKFace"
+    cropped_dir.mkdir()
+
+    # low: 50x50, medium: 200x200, high: 400x400
+    _make_image(cropped_dir / "20_0_0_low.png", 50, 50)
+    _make_image(cropped_dir / "30_1_1_med.png", 200, 200)
+    _make_image(cropped_dir / "40_0_2_high.png", 400, 400)
+
+    import app as app_module
+    original_data_dir = app_module.DATA_DIR
+    original_dataset_dirs = app_module.DATASET_DIRS.copy()
+
+    app_module.DATA_DIR = tmp_path
+    app_module.DATASET_DIRS["cropped"] = cropped_dir
+    app_module.DATASET_DIRS["wild"] = tmp_path / "in-the-wild"
+    app_module._get_image_resolution.cache_clear()
+
+    flask_app = create_app()
+    flask_app.config["TESTING"] = True
+
+    yield flask_app
+
+    app_module.DATA_DIR = original_data_dir
+    app_module.DATASET_DIRS.update(original_dataset_dirs)
+    app_module._get_image_resolution.cache_clear()
+
+
+@pytest.fixture
+def client_res(app_with_resolutions):
+    return app_with_resolutions.test_client()
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +309,65 @@ class TestBuildImageIndex:
 
 
 # ---------------------------------------------------------------------------
+# Unit tests – _classify_resolution / _get_image_resolution
+# ---------------------------------------------------------------------------
+
+class TestClassifyResolution:
+    def test_low_resolution(self):
+        assert _classify_resolution(50, 50) == "low"
+
+    def test_low_resolution_non_square(self):
+        assert _classify_resolution(500, 50) == "low"
+
+    def test_medium_resolution_lower_bound(self):
+        assert _classify_resolution(100, 100) == "medium"
+
+    def test_medium_resolution_upper_bound(self):
+        assert _classify_resolution(300, 300) == "medium"
+
+    def test_high_resolution(self):
+        assert _classify_resolution(400, 400) == "high"
+
+    def test_high_resolution_non_square(self):
+        assert _classify_resolution(400, 50) == "low"
+
+    def test_just_below_high_threshold(self):
+        assert _classify_resolution(300, 300) == "medium"
+
+    def test_just_above_high_threshold(self):
+        assert _classify_resolution(301, 301) == "high"
+
+
+class TestGetImageResolution:
+    def test_reads_dimensions_and_classifies(self, tmp_path):
+        import app as app_module
+        path = tmp_path / "test_high.png"
+        _make_image(path, 400, 400)
+        app_module._get_image_resolution.cache_clear()
+        assert _get_image_resolution(path) == "high"
+
+    def test_caches_result(self, tmp_path):
+        import app as app_module
+        path = tmp_path / "test_med.png"
+        _make_image(path, 200, 200)
+        app_module._get_image_resolution.cache_clear()
+        result1 = _get_image_resolution(path)
+        result2 = _get_image_resolution(path)
+        assert result1 == result2 == "medium"
+        # Verify the LRU cache has an entry
+        info = app_module._get_image_resolution.cache_info()
+        assert info.currsize > 0
+
+    def test_fallback_for_non_image(self, tmp_path):
+        import app as app_module
+        path = tmp_path / "not_an_image.jpg"
+        path.write_text("not an image")
+        app_module._get_image_resolution.cache_clear()
+        # Should return "medium" (fallback) without raising
+        assert _get_image_resolution(path) == "medium"
+
+
+# ---------------------------------------------------------------------------
 # Integration tests – /api/health
 # ---------------------------------------------------------------------------
 
@@ -367,6 +481,102 @@ class TestRandomEndpoint:
         # If only a non-existent dataset is requested, no results
         response = client.get("/api/random?datasets=nonexistent")
         assert response.status_code == 404
+
+    def test_filters_by_single_resolution(self, client_res):
+        # Only "medium" images should be returned
+        response = client_res.get("/api/random?resolutions=medium&datasets=cropped")
+        assert response.status_code == 200
+        assert response.get_json()["resolution"] == "medium"
+
+    def test_filters_by_high_resolution(self, client_res):
+        response = client_res.get("/api/random?resolutions=high&datasets=cropped")
+        assert response.status_code == 200
+        assert response.get_json()["resolution"] == "high"
+
+    def test_filters_by_low_resolution(self, client_res):
+        response = client_res.get("/api/random?resolutions=low&datasets=cropped")
+        assert response.status_code == 200
+        assert response.get_json()["resolution"] == "low"
+
+    def test_filters_by_multiple_resolutions(self, client_res):
+        response = client_res.get("/api/random?resolutions=low,high&datasets=cropped")
+        assert response.status_code == 200
+        assert response.get_json()["resolution"] in ("low", "high")
+
+    def test_resolution_in_response(self, client_res):
+        response = client_res.get("/api/random?datasets=cropped")
+        assert response.status_code == 200
+        assert "resolution" in response.get_json()
+
+    def test_empty_resolutions_returns_400(self, client_res):
+        response = client_res.get("/api/random?resolutions=&datasets=cropped")
+        assert response.status_code == 400
+
+    def test_no_matching_resolution_returns_404(self, client_res):
+        # Only medium images exist for age 30 (gender=1, race=1)
+        response = client_res.get(
+            "/api/random?resolutions=low&min_age=30&max_age=30&datasets=cropped"
+        )
+        assert response.status_code == 404
+
+    def test_default_resolutions_returns_all(self, client_res):
+        # No resolutions param → defaults to all → should find images
+        response = client_res.get("/api/random?datasets=cropped")
+        assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Integration tests – /api/count
+# ---------------------------------------------------------------------------
+
+class TestCountEndpoint:
+    def test_returns_count(self, client):
+        response = client.get("/api/count?datasets=cropped")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "count" in data
+        assert isinstance(data["count"], int)
+
+    def test_count_matches_available_images(self, client):
+        # Default fixtures have 5 cropped images
+        response = client.get("/api/count?datasets=cropped")
+        assert response.get_json()["count"] == 5
+
+    def test_count_filters_by_age(self, client):
+        response = client.get("/api/count?min_age=25&max_age=25&datasets=cropped")
+        assert response.get_json()["count"] == 1
+
+    def test_count_filters_by_gender(self, client):
+        # Only females (gender=1): age 30 and 60
+        response = client.get("/api/count?genders=1&datasets=cropped")
+        assert response.get_json()["count"] == 2
+
+    def test_count_zero_when_no_match(self, client):
+        response = client.get("/api/count?min_age=90&max_age=100&datasets=cropped")
+        assert response.status_code == 200
+        assert response.get_json()["count"] == 0
+
+    def test_count_filters_by_resolution(self, client_res):
+        response = client_res.get("/api/count?resolutions=high&datasets=cropped")
+        assert response.get_json()["count"] == 1
+
+    def test_count_invalid_age_returns_400(self, client):
+        response = client.get("/api/count?min_age=abc&datasets=cropped")
+        assert response.status_code == 400
+
+    def test_count_empty_datasets_returns_400(self, client):
+        response = client.get("/api/count?datasets=")
+        assert response.status_code == 400
+
+    def test_count_empty_resolutions_returns_400(self, client):
+        response = client.get("/api/count?resolutions=&datasets=cropped")
+        assert response.status_code == 400
+
+    def test_count_default_params(self, client):
+        # No params – uses all defaults; cropped dataset is present
+        response = client.get("/api/count")
+        assert response.status_code == 200
+        assert response.get_json()["count"] >= 0
 
 
 # ---------------------------------------------------------------------------

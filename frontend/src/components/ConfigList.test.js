@@ -6,6 +6,12 @@ import React from "react";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import ConfigList from "./ConfigList";
 
+// Mock useImageCount so tests don't need a running backend
+jest.mock("../utils/useImageCount", () => ({
+  __esModule: true,
+  default: () => ({ count: 42, loading: false, error: null }),
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -19,6 +25,7 @@ function makeConfig(overrides = {}) {
     maxAge: 100,
     genders: [0, 1],
     races: [0, 1, 2, 3, 4],
+    resolutions: ["low", "medium", "high"],
     datasets: ["cropped", "wild"],
     history: [],
     ...overrides,
@@ -145,6 +152,21 @@ describe("ConfigList expand/collapse", () => {
     fireEvent.click(screen.getByText("Test Config"));
     expect(screen.getByText(/datasets:/i)).toBeInTheDocument();
     expect(screen.getByText("cropped")).toBeInTheDocument();
+  });
+
+  it("shows resolutions in detail panel", () => {
+    renderList([makeConfig({ resolutions: ["low", "high"] })]);
+    fireEvent.click(screen.getByText("Test Config"));
+    expect(screen.getByText(/resolutions:/i)).toBeInTheDocument();
+    expect(screen.getByText(/low/i)).toBeInTheDocument();
+    expect(screen.getByText(/high/i)).toBeInTheDocument();
+  });
+
+  it("shows image count in detail panel", () => {
+    renderList([makeConfig()]);
+    fireEvent.click(screen.getByText("Test Config"));
+    expect(screen.getByText(/images:/i)).toBeInTheDocument();
+    expect(screen.getByText(/42 available/i)).toBeInTheDocument();
   });
 
   it("collapses when header is clicked again", () => {

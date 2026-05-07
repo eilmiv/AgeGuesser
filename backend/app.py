@@ -2,7 +2,7 @@
 AgeGuesser Flask backend.
 
 Serves face images from the UTKFace dataset and provides a random-image
-selection endpoint filtered by age, gender, race and dataset type.
+selection endpoint filtered by age, gender, race, resolution and dataset type.
 
 Dataset must be downloaded first:
     python manage.py download
@@ -14,10 +14,12 @@ import os
 import re
 import random
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 from flask import Flask, jsonify, send_file, request
 from flask_cors import CORS
+from PIL import Image
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -106,11 +108,46 @@ def _parse_filename(filename: str) -> dict[str, int] | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Resolution helpers
+# ---------------------------------------------------------------------------
+
+# Pixel threshold (smaller image dimension) that separates resolution classes.
+_RESOLUTION_HIGH_THRESHOLD: int = 300
+_RESOLUTION_LOW_THRESHOLD: int = 100
+
+def _classify_resolution(width: int, height: int) -> str:
+    """Classify an image into 'low', 'medium', or 'high' based on its dimensions."""
+    smaller = min(width, height)
+    if smaller > _RESOLUTION_HIGH_THRESHOLD:
+        return "high"
+    if smaller >= _RESOLUTION_LOW_THRESHOLD:
+        return "medium"
+    return "low"
+
+
+# LRU cache (max 65 536 entries) so each file path is read at most once per
+# process while preventing unbounded memory growth.
+@lru_cache(maxsize=65536)
+def _get_image_resolution(path: Path) -> str:
+    """
+    Return the resolution class ('low', 'medium', or 'high') for the image at
+    *path*, reading dimensions via Pillow.  Results are cached so each file is
+    read at most once per process.
+    """
+    try:
+        with Image.open(path) as img:
+            width, height = img.size
+        return _classify_resolution(width, height)
+    except Exception:
+        return "medium"  # fallback for unreadable images
+
+
 def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
     """
     Build an in-memory list of all matching images across the requested
     datasets.  Returns a list of dicts with keys: dataset, filename, age,
-    gender, race.
+    gender, race, resolution.
     """
     index: list[dict[str, str | int]] = []
     for ds in datasets:
@@ -121,6 +158,7 @@ def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
             meta = _parse_filename(filename)
             if meta is None:
                 continue
+            resolution = _get_image_resolution(directory / filename)
             index.append(
                 {
                     "dataset": ds,
@@ -128,9 +166,91 @@ def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
                     "age": meta["age"],
                     "gender": meta["gender"],
                     "race": meta["race"],
+                    "resolution": resolution,
                 }
             )
     return index
+
+
+# ---------------------------------------------------------------------------
+# Filter helpers (shared by /api/random and /api/count)
+# ---------------------------------------------------------------------------
+
+# Typed exception classes for validation failures so that route handlers can
+# return completely static error-message literals with no tainted data flow.
+class _BadAgeParams(Exception):
+    """Raised when min_age / max_age cannot be parsed as integers."""
+
+class _BadGenderRaceParams(Exception):
+    """Raised when genders or races contain non-integer values."""
+
+class _EmptyResolutions(Exception):
+    """Raised when the resolutions list is empty after parsing."""
+
+class _EmptyDatasets(Exception):
+    """Raised when the datasets list is empty after parsing."""
+
+
+def _parse_filter_params(
+    args: dict[str, str],
+) -> dict:
+    """
+    Parse and validate common filter query parameters.
+
+    Returns a dict with keys: min_age, max_age, genders, races,
+    resolutions, datasets.
+
+    Raises a typed exception (no payload) on validation failure so that
+    callers can respond with fully static error-message literals.
+    """
+    try:
+        min_age = int(args.get("min_age", 0))
+        max_age = int(args.get("max_age", 116))
+    except ValueError:
+        raise _BadAgeParams()
+
+    genders_raw = args.get("genders", "0,1")
+    races_raw = args.get("races", "0,1,2,3,4")
+    resolutions_raw = args.get("resolutions", "low,medium,high")
+    datasets_raw = args.get("datasets", "cropped,wild")
+
+    try:
+        genders = [int(g) for g in genders_raw.split(",") if g.strip()]
+        races = [int(r) for r in races_raw.split(",") if r.strip()]
+    except ValueError:
+        raise _BadGenderRaceParams()
+
+    resolutions = [r.strip() for r in resolutions_raw.split(",") if r.strip()]
+    if not resolutions:
+        raise _EmptyResolutions()
+
+    datasets = [d.strip() for d in datasets_raw.split(",") if d.strip()]
+    if not datasets:
+        raise _EmptyDatasets()
+
+    return {
+        "min_age": min_age,
+        "max_age": max_age,
+        "genders": genders,
+        "races": races,
+        "resolutions": resolutions,
+        "datasets": datasets,
+    }
+
+
+def _filter_candidates(
+    params: dict,
+) -> list[dict[str, str | int]]:
+    """Return all images matching the given filter parameters."""
+    index = _build_image_index(params["datasets"])
+    return [
+        img
+        for img in index
+        if (params["min_age"] <= img["age"] <= params["max_age"])
+        and (img["gender"] in params["genders"])
+        and (img["race"] in params["races"])
+        and (img["resolution"] in params["resolutions"])
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -165,47 +285,52 @@ def _register_routes(app: Flask) -> None:
 
         return jsonify({"error": "Image not found"}), 404
 
+    @app.route("/api/count")
+    def get_count():
+        """
+        Return the number of images matching the given filter criteria.
+
+        Query parameters: same as /api/random
+        """
+        try:
+            params = _parse_filter_params(request.args)
+        except _BadAgeParams:
+            return jsonify({"error": "min_age and max_age must be integers"}), 400
+        except _BadGenderRaceParams:
+            return jsonify({"error": "genders and races must be comma-separated integers"}), 400
+        except _EmptyResolutions:
+            return jsonify({"error": "At least one resolution must be specified"}), 400
+        except _EmptyDatasets:
+            return jsonify({"error": "At least one dataset must be specified"}), 400
+
+        count = len(_filter_candidates(params))
+        return jsonify({"count": count})
+
     @app.route("/api/random")
     def get_random():
         """
         Return a random image matching the given filter criteria.
 
         Query parameters:
-            min_age   (int, default 0)
-            max_age   (int, default 116)
-            genders   (comma-separated ints, default 0,1)
-            races     (comma-separated ints, default 0,1,2,3,4)
-            datasets  (comma-separated strings, default cropped,wild)
+            min_age      (int, default 0)
+            max_age      (int, default 116)
+            genders      (comma-separated ints, default 0,1)
+            races        (comma-separated ints, default 0,1,2,3,4)
+            resolutions  (comma-separated strings, default low,medium,high)
+            datasets     (comma-separated strings, default cropped,wild)
         """
         try:
-            min_age = int(request.args.get("min_age", 0))
-            max_age = int(request.args.get("max_age", 116))
-        except ValueError:
+            params = _parse_filter_params(request.args)
+        except _BadAgeParams:
             return jsonify({"error": "min_age and max_age must be integers"}), 400
-
-        genders_raw = request.args.get("genders", "0,1")
-        races_raw = request.args.get("races", "0,1,2,3,4")
-        datasets_raw = request.args.get("datasets", "cropped,wild")
-
-        try:
-            genders = [int(g) for g in genders_raw.split(",") if g.strip()]
-            races = [int(r) for r in races_raw.split(",") if r.strip()]
-        except ValueError:
+        except _BadGenderRaceParams:
             return jsonify({"error": "genders and races must be comma-separated integers"}), 400
-
-        datasets = [d.strip() for d in datasets_raw.split(",") if d.strip()]
-        if not datasets:
+        except _EmptyResolutions:
+            return jsonify({"error": "At least one resolution must be specified"}), 400
+        except _EmptyDatasets:
             return jsonify({"error": "At least one dataset must be specified"}), 400
 
-        index = _build_image_index(datasets)
-
-        candidates = [
-            img
-            for img in index
-            if (min_age <= img["age"] <= max_age)
-            and (img["gender"] in genders)
-            and (img["race"] in races)
-        ]
+        candidates = _filter_candidates(params)
 
         if not candidates:
             return jsonify({"error": "No images match the given criteria"}), 404
@@ -218,6 +343,7 @@ def _register_routes(app: Flask) -> None:
                 "age": chosen["age"],
                 "gender": chosen["gender"],
                 "race": chosen["race"],
+                "resolution": chosen["resolution"],
                 "url": f"/api/image/{chosen['dataset']}/{chosen['filename']}",
             }
         )

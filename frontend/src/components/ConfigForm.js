@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { createDefaultConfig, generateId } from "../utils/storage";
+import useImageCount from "../utils/useImageCount";
 import "./ConfigForm.css";
 
 const GENDER_OPTIONS = [
@@ -15,6 +16,12 @@ const RACE_OPTIONS = [
   { value: 4, label: "Other" },
 ];
 
+const RESOLUTION_OPTIONS = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
 const DATASET_OPTIONS = [
   { value: "cropped", label: "Cropped faces" },
   { value: "wild", label: "In-the-wild faces" },
@@ -24,7 +31,11 @@ export default function ConfigForm({ initial, onSave, onCancel }) {
   const defaults = createDefaultConfig();
   const [form, setForm] = useState(
     initial
-      ? { ...initial }
+      ? {
+          ...initial,
+          // Backward compatibility: old configs may not have resolutions
+          resolutions: initial.resolutions ?? defaults.resolutions,
+        }
       : defaults
   );
   const [errors, setErrors] = useState({});
@@ -38,6 +49,7 @@ export default function ConfigForm({ initial, onSave, onCancel }) {
     if (form.facesPerRun < 1 || form.facesPerRun > 100) errs.facesPerRun = "1–100";
     if (form.genders.length === 0) errs.genders = "Select at least one gender";
     if (form.races.length === 0) errs.races = "Select at least one race";
+    if (form.resolutions.length === 0) errs.resolutions = "Select at least one resolution";
     if (form.datasets.length === 0) errs.datasets = "Select at least one dataset";
     return errs;
   }
@@ -161,6 +173,24 @@ export default function ConfigForm({ initial, onSave, onCancel }) {
           {errors.races && <span className="field-error">{errors.races}</span>}
         </div>
 
+        {/* Resolutions */}
+        <div className="form-group">
+          <label>Resolutions</label>
+          <div className="checkbox-group">
+            {RESOLUTION_OPTIONS.map(({ value, label }) => (
+              <label key={value} className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={form.resolutions.includes(value)}
+                  onChange={() => toggleMulti("resolutions", value)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          {errors.resolutions && <span className="field-error">{errors.resolutions}</span>}
+        </div>
+
         {/* Datasets */}
         <div className="form-group">
           <label>Datasets</label>
@@ -179,6 +209,11 @@ export default function ConfigForm({ initial, onSave, onCancel }) {
           {errors.datasets && <span className="field-error">{errors.datasets}</span>}
         </div>
 
+        {/* Live image count */}
+        <div className="form-group form-image-count">
+          <ImageCountBadge form={form} />
+        </div>
+
         <div className="form-actions">
           <button type="button" className="btn btn-outline" onClick={onCancel}>
             Cancel
@@ -189,5 +224,29 @@ export default function ConfigForm({ initial, onSave, onCancel }) {
         </div>
       </form>
     </div>
+  );
+}
+
+/** Live count feedback widget rendered inside the form. */
+function ImageCountBadge({ form }) {
+  const { count, loading, error } = useImageCount(form);
+
+  if (loading) {
+    return <span className="image-count-badge count-loading">Counting images…</span>;
+  }
+  if (error) {
+    return <span className="image-count-badge count-error">Count unavailable</span>;
+  }
+  if (count === 0) {
+    return (
+      <span className="image-count-badge count-zero">
+        ⚠ No images match — adjust your filters
+      </span>
+    );
+  }
+  return (
+    <span className="image-count-badge count-ok">
+      {count} image{count !== 1 ? "s" : ""} available
+    </span>
   );
 }

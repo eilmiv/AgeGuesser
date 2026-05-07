@@ -25,6 +25,7 @@ function makeConfig(overrides = {}) {
     maxAge: 100,
     genders: [0, 1],
     races: [0, 1, 2, 3, 4],
+    resolutions: ["low", "medium", "high"],
     datasets: ["cropped", "wild"],
     history: [],
     ...overrides,
@@ -200,6 +201,7 @@ describe("createDefaultConfig", () => {
     expect(cfg.facesPerRun).toBeGreaterThan(0);
     expect(Array.isArray(cfg.genders)).toBe(true);
     expect(Array.isArray(cfg.races)).toBe(true);
+    expect(Array.isArray(cfg.resolutions)).toBe(true);
     expect(Array.isArray(cfg.datasets)).toBe(true);
     expect(Array.isArray(cfg.history)).toBe(true);
   });
@@ -226,6 +228,12 @@ describe("createDefaultConfig", () => {
 
   it("includes all 5 races by default", () => {
     expect(createDefaultConfig().races).toHaveLength(5);
+  });
+
+  it("includes all 3 resolutions by default", () => {
+    expect(createDefaultConfig().resolutions).toEqual(
+      expect.arrayContaining(["low", "medium", "high"])
+    );
   });
 
   it("includes both datasets by default", () => {

@@ -38,7 +38,10 @@ Two sub-datasets are used:
 - Images are served via `/api/image/<dataset>/<filename>`
 - Random image selection: `GET /api/random` with query params
   `min_age`, `max_age`, `genders` (comma-separated), `races` (comma-separated),
+  `resolutions` (comma-separated: `low`, `medium`, `high`),
   `datasets` (comma-separated: `cropped`, `wild`)
+- Image count: `GET /api/count` accepts the same query params as `/api/random`
+  and returns `{"count": <int>}`
 
 ## Frontend conventions
 - Entry point: `frontend/src/index.js`
@@ -59,6 +62,7 @@ Two sub-datasets are used:
   "maxAge": 100,
   "genders": [0, 1],
   "races": [0, 1, 2, 3, 4],
+  "resolutions": ["low", "medium", "high"],
   "datasets": ["cropped", "wild"],
   "history": [
     { "date": "2026-01-01T12:00:00Z", "avgDistance": 7.3 }

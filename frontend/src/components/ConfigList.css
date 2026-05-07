@@ -106,3 +106,27 @@
   color: var(--text-muted);
   font-style: italic;
 }
+
+.image-count {
+  font-size: 0.9rem;
+}
+
+.count-loading {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.count-error {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.count-zero {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.count-value {
+  color: var(--success);
+  font-weight: 600;
+}

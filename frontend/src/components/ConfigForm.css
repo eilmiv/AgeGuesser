@@ -76,3 +76,36 @@
   justify-content: flex-end;
   margin-top: 24px;
 }
+
+.form-image-count {
+  margin-bottom: 0;
+}
+
+.image-count-badge {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+}
+
+.image-count-badge.count-loading,
+.image-count-badge.count-error {
+  color: var(--text-muted);
+  background: transparent;
+  font-weight: normal;
+  font-style: italic;
+  padding-left: 0;
+}
+
+.image-count-badge.count-zero {
+  color: var(--warning);
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+.image-count-badge.count-ok {
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+}
