@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
 
 import manage
-from manage import cli, _extract_archive
+from manage import cli, _extract_archive, _fix_swapped_dataset_dirs
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +167,42 @@ class TestExtractArchive:
         _extract_archive(archive, dest)
         # All 3 images should now be in dest
         assert len(list(dest.iterdir())) == 3
+
+
+class TestFixSwappedDatasetDirs:
+    def test_swaps_dirs_when_chip_files_are_in_wild_dir(self, tmp_path):
+        cropped_dir = tmp_path / "UTKFace"
+        wild_dir = tmp_path / "in-the-wild"
+        cropped_dir.mkdir()
+        wild_dir.mkdir()
+
+        (cropped_dir / "25_0_0_date.jpg").write_text("wild-like")
+        (wild_dir / "30_1_2_date.jpg.chip.jpg").write_text("cropped-like")
+
+        with patch.object(manage, "DATA_DIR", tmp_path), patch.object(
+            manage, "DATASET_DIRS", {"cropped": cropped_dir, "wild": wild_dir}
+        ):
+            _fix_swapped_dataset_dirs()
+
+        assert (cropped_dir / "30_1_2_date.jpg.chip.jpg").exists()
+        assert (wild_dir / "25_0_0_date.jpg").exists()
+
+    def test_does_not_swap_when_dirs_already_match_expected_content(self, tmp_path):
+        cropped_dir = tmp_path / "UTKFace"
+        wild_dir = tmp_path / "in-the-wild"
+        cropped_dir.mkdir()
+        wild_dir.mkdir()
+
+        (cropped_dir / "30_1_2_date.jpg.chip.jpg").write_text("cropped-like")
+        (wild_dir / "25_0_0_date.jpg").write_text("wild-like")
+
+        with patch.object(manage, "DATA_DIR", tmp_path), patch.object(
+            manage, "DATASET_DIRS", {"cropped": cropped_dir, "wild": wild_dir}
+        ):
+            _fix_swapped_dataset_dirs()
+
+        assert (cropped_dir / "30_1_2_date.jpg.chip.jpg").exists()
+        assert (wild_dir / "25_0_0_date.jpg").exists()
 
 
 # ---------------------------------------------------------------------------

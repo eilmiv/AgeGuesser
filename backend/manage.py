@@ -73,6 +73,8 @@ def download(datasets: str) -> None:
     if "wild" in selected:
         _download_wild()
 
+    _fix_swapped_dataset_dirs()
+
     click.echo("\n✓ Dataset download complete.")
     click.echo(f"  Cropped faces: {DATASET_DIRS['cropped']}")
     click.echo(f"  Wild faces:    {DATASET_DIRS['wild']}")
@@ -165,6 +167,50 @@ def _extract_archive(archive_path: Path, dest_dir: Path) -> None:
         click.echo(f"    Moved {count} image(s) to {dest_dir}")
     finally:
         shutil.rmtree(tmp_extract, ignore_errors=True)
+
+
+def _looks_like_cropped(directory: Path, sample_size: int = 50) -> bool:
+    """
+    Heuristic for aligned/cropped UTKFace files.
+
+    The cropped split commonly contains names like `...jpg.chip.jpg`.
+    """
+    valid_exts = {".jpg", ".jpeg", ".png"}
+    checked = 0
+    for path in directory.iterdir():
+        if not path.is_file() or path.suffix.lower() not in valid_exts:
+            continue
+        checked += 1
+        if ".chip." in path.name.lower():
+            return True
+        if checked >= sample_size:
+            break
+    return False
+
+
+def _fix_swapped_dataset_dirs() -> None:
+    """
+    Swap dataset directories when downloaded content appears reversed.
+
+    This handles cases where remote archives are mislabeled upstream.
+    """
+    cropped_dir = DATASET_DIRS["cropped"]
+    wild_dir = DATASET_DIRS["wild"]
+    if not cropped_dir.is_dir() or not wild_dir.is_dir():
+        return
+
+    cropped_looks_cropped = _looks_like_cropped(cropped_dir)
+    wild_looks_cropped = _looks_like_cropped(wild_dir)
+
+    if cropped_looks_cropped or not wild_looks_cropped:
+        return
+
+    tmp_dir = DATA_DIR / "_tmp_dataset_swap"
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    cropped_dir.rename(tmp_dir)
+    wild_dir.rename(cropped_dir)
+    tmp_dir.rename(wild_dir)
+    click.echo("  Detected swapped datasets, fixed directory mapping automatically.")
 
 
 # ---------------------------------------------------------------------------
