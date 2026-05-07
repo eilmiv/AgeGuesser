@@ -170,7 +170,7 @@ class TestExtractArchive:
 
 
 class TestFixSwappedDatasetDirs:
-    def test_swaps_dirs_when_chip_files_are_in_cropped_dir(self, tmp_path):
+    def test_swaps_dirs_when_three_part_split_is_in_cropped_dir(self, tmp_path):
         cropped_dir = tmp_path / "UTKFace"
         wild_dir = tmp_path / "in-the-wild"
         cropped_dir.mkdir()

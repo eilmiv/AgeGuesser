@@ -190,9 +190,9 @@ def _extract_archive(archive_path: Path, dest_dir: Path) -> None:
 
 def _looks_like_three_part_split(directory: Path, sample_size: int = 50) -> bool:
     """
-    Heuristic for the 3-part UTKFace archive split downloaded by this project.
+    Heuristic for identifying content from the 3-part archive split.
 
-    That split commonly contains names like `...jpg.chip.jpg`.
+    In practice this split commonly contains names like `...jpg.chip.jpg`.
     Returns True when such names are seen within the first *sample_size* images.
     """
     valid_exts = {".jpg", ".jpeg", ".png"}
