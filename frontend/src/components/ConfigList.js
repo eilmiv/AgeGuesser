@@ -87,7 +87,7 @@ export default function ConfigList({ configs, onNew, onEdit, onDelete, onRun }) 
 
 /** Expanded body of a single config card, including image count. */
 function ConfigCardBody({ config }) {
-  const { count, loading, error } = useImageCount(config, { debounceMs: 0 });
+  const { count, loading, error } = useImageCount(config, { debounceMs: 150 });
 
   const resolutions = config.resolutions ?? ["low", "medium", "high"];
 
