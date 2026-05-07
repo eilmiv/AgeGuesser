@@ -175,6 +175,7 @@ def _looks_like_cropped(directory: Path, sample_size: int = 50) -> bool:
     Heuristic for aligned/cropped UTKFace files downloaded by this project.
 
     The aligned/cropped archives commonly contain names like `...jpg.chip.jpg`.
+    Returns True when such names are seen within the first *sample_size* images.
     """
     valid_exts = {".jpg", ".jpeg", ".png"}
     checked = 0
@@ -214,9 +215,11 @@ def _fix_swapped_dataset_dirs() -> None:
         wild_dir.rename(cropped_dir)
         tmp_dir.rename(wild_dir)
     except OSError:
+        # Step 2 succeeded but step 3 failed: restore original paths.
         if cropped_dir.exists() and tmp_dir.exists() and not wild_dir.exists():
             cropped_dir.rename(wild_dir)
             tmp_dir.rename(cropped_dir)
+        # Step 1 succeeded but step 2 failed: restore cropped path.
         elif tmp_dir.exists() and not cropped_dir.exists():
             tmp_dir.rename(cropped_dir)
         raise
