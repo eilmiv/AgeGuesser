@@ -323,7 +323,7 @@ class TestClassifyResolution:
         assert _classify_resolution(100, 100) == "medium"
 
     def test_medium_resolution_upper_bound(self):
-        assert _classify_resolution(300, 300) == "medium"
+        assert _classify_resolution(200, 200) == "medium"
 
     def test_high_resolution(self):
         assert _classify_resolution(400, 400) == "high"
@@ -332,10 +332,13 @@ class TestClassifyResolution:
         assert _classify_resolution(400, 50) == "low"
 
     def test_just_below_high_threshold(self):
-        assert _classify_resolution(300, 300) == "medium"
+        assert _classify_resolution(200, 200) == "medium"
 
     def test_just_above_high_threshold(self):
-        assert _classify_resolution(301, 301) == "high"
+        assert _classify_resolution(201, 201) == "high"
+
+    def test_300px_is_high(self):
+        assert _classify_resolution(300, 300) == "high"
 
 
 class TestGetImageResolution:

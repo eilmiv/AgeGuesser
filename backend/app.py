@@ -113,7 +113,7 @@ def _parse_filename(filename: str) -> dict[str, int] | None:
 # ---------------------------------------------------------------------------
 
 # Pixel threshold (smaller image dimension) that separates resolution classes.
-_RESOLUTION_HIGH_THRESHOLD: int = 300
+_RESOLUTION_HIGH_THRESHOLD: int = 200
 _RESOLUTION_LOW_THRESHOLD: int = 100
 
 def _classify_resolution(width: int, height: int) -> str:
