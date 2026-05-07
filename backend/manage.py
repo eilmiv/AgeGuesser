@@ -11,6 +11,7 @@ import shutil
 import tarfile
 import zipfile
 from pathlib import Path
+from uuid import uuid4
 
 import click
 import gdown
@@ -202,11 +203,12 @@ def _fix_swapped_dataset_dirs() -> None:
     cropped_looks_cropped = _looks_like_cropped(cropped_dir)
     wild_looks_cropped = _looks_like_cropped(wild_dir)
 
+    # Swap only when cropped does NOT look cropped and wild DOES look cropped,
+    # which indicates the two datasets are reversed.
     if cropped_looks_cropped or not wild_looks_cropped:
         return
 
-    tmp_dir = DATA_DIR / "_tmp_dataset_swap"
-    shutil.rmtree(tmp_dir, ignore_errors=True)
+    tmp_dir = DATA_DIR / f"_tmp_dataset_swap_{uuid4().hex}"
     cropped_dir.rename(tmp_dir)
     wild_dir.rename(cropped_dir)
     tmp_dir.rename(wild_dir)
