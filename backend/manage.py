@@ -188,11 +188,10 @@ def _extract_archive(archive_path: Path, dest_dir: Path) -> None:
         shutil.rmtree(tmp_extract, ignore_errors=True)
 
 
-def _looks_like_three_part_split(directory: Path, sample_size: int = 50) -> bool:
+def _contains_chip_files(directory: Path, sample_size: int = 50) -> bool:
     """
-    Heuristic for identifying content from the 3-part archive split.
+    Heuristic for identifying directories containing `*.chip.*` image names.
 
-    In practice this split commonly contains names like `...jpg.chip.jpg`.
     Returns True when such names are seen within the first *sample_size* images.
     """
     valid_exts = {".jpg", ".jpeg", ".png"}
@@ -219,12 +218,11 @@ def _fix_swapped_dataset_dirs() -> None:
     if not cropped_dir.is_dir() or not wild_dir.is_dir():
         return
 
-    cropped_looks_three_part = _looks_like_three_part_split(cropped_dir)
-    wild_looks_three_part = _looks_like_three_part_split(wild_dir)
+    cropped_has_chip_files = _contains_chip_files(cropped_dir)
+    wild_has_chip_files = _contains_chip_files(wild_dir)
 
-    # Expected mapping is: cropped -> single archive, wild -> 3-part split.
-    # Swap only when cropped looks like the 3-part split and wild does not.
-    should_swap = cropped_looks_three_part and not wild_looks_three_part
+    # Swap only when cropped has chip-style files and wild does not.
+    should_swap = cropped_has_chip_files and not wild_has_chip_files
     if not should_swap:
         return
 
