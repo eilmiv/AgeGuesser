@@ -188,7 +188,7 @@ def _extract_archive(archive_path: Path, dest_dir: Path) -> None:
         shutil.rmtree(tmp_extract, ignore_errors=True)
 
 
-def _looks_like_cropped(directory: Path, sample_size: int = 50) -> bool:
+def _looks_like_three_part_split(directory: Path, sample_size: int = 50) -> bool:
     """
     Heuristic for the 3-part UTKFace archive split downloaded by this project.
 
@@ -219,12 +219,13 @@ def _fix_swapped_dataset_dirs() -> None:
     if not cropped_dir.is_dir() or not wild_dir.is_dir():
         return
 
-    cropped_looks_cropped = _looks_like_cropped(cropped_dir)
-    wild_looks_cropped = _looks_like_cropped(wild_dir)
+    cropped_looks_three_part = _looks_like_three_part_split(cropped_dir)
+    wild_looks_three_part = _looks_like_three_part_split(wild_dir)
 
     # Expected mapping is: cropped -> single archive, wild -> 3-part split.
     # Swap only when cropped looks like the 3-part split and wild does not.
-    if not cropped_looks_cropped or wild_looks_cropped:
+    should_swap = cropped_looks_three_part and not wild_looks_three_part
+    if not should_swap:
         return
 
     tmp_dir = DATA_DIR / f"_tmp_dataset_swap_{uuid4().hex}"
