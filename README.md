@@ -108,6 +108,14 @@ Returns a random image matching the given criteria.
 }
 ```
 
+### `GET /api/count`
+Returns the number of images matching the given criteria. Accepts the same query parameters as `/api/random`.
+
+**Example response:**
+```json
+{ "count": 4821 }
+```
+
 ### `GET /api/image/<dataset>/<filename>`
 Serves the raw image file. `dataset` is either `cropped` or `wild`.
 

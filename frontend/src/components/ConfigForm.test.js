@@ -7,6 +7,12 @@ import { render, screen, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ConfigForm from "./ConfigForm";
 
+// Mock useImageCount so tests don't need a running backend
+jest.mock("../utils/useImageCount", () => ({
+  __esModule: true,
+  default: () => ({ count: 100, loading: false, error: null }),
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -95,6 +101,11 @@ describe("ConfigForm rendering", () => {
     renderForm();
     expect(screen.getByRole("button", { name: /save/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  it("shows image count badge", () => {
+    renderForm();
+    expect(screen.getByText(/100 images available/i)).toBeInTheDocument();
   });
 });
 

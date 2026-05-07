@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { createDefaultConfig, generateId } from "../utils/storage";
+import useImageCount from "../utils/useImageCount";
 import "./ConfigForm.css";
 
 const GENDER_OPTIONS = [
@@ -208,6 +209,11 @@ export default function ConfigForm({ initial, onSave, onCancel }) {
           {errors.datasets && <span className="field-error">{errors.datasets}</span>}
         </div>
 
+        {/* Live image count */}
+        <div className="form-group form-image-count">
+          <ImageCountBadge form={form} />
+        </div>
+
         <div className="form-actions">
           <button type="button" className="btn btn-outline" onClick={onCancel}>
             Cancel
@@ -218,5 +224,29 @@ export default function ConfigForm({ initial, onSave, onCancel }) {
         </div>
       </form>
     </div>
+  );
+}
+
+/** Live count feedback widget rendered inside the form. */
+function ImageCountBadge({ form }) {
+  const { count, loading, error } = useImageCount(form);
+
+  if (loading) {
+    return <span className="image-count-badge count-loading">Counting images…</span>;
+  }
+  if (error) {
+    return <span className="image-count-badge count-error">Count unavailable</span>;
+  }
+  if (count === 0) {
+    return (
+      <span className="image-count-badge count-zero">
+        ⚠ No images match — adjust your filters
+      </span>
+    );
+  }
+  return (
+    <span className="image-count-badge count-ok">
+      {count} image{count !== 1 ? "s" : ""} available
+    </span>
   );
 }

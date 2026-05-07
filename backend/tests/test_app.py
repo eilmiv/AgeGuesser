@@ -12,6 +12,8 @@ from app import (
     _build_image_index,
     _classify_resolution,
     _get_image_resolution,
+    _parse_filter_params,
+    _filter_candidates,
 )
 
 
@@ -517,6 +519,60 @@ class TestRandomEndpoint:
         # No resolutions param → defaults to all → should find images
         response = client_res.get("/api/random?datasets=cropped")
         assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Integration tests – /api/count
+# ---------------------------------------------------------------------------
+
+class TestCountEndpoint:
+    def test_returns_count(self, client):
+        response = client.get("/api/count?datasets=cropped")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "count" in data
+        assert isinstance(data["count"], int)
+
+    def test_count_matches_available_images(self, client):
+        # Default fixtures have 5 cropped images
+        response = client.get("/api/count?datasets=cropped")
+        assert response.get_json()["count"] == 5
+
+    def test_count_filters_by_age(self, client):
+        response = client.get("/api/count?min_age=25&max_age=25&datasets=cropped")
+        assert response.get_json()["count"] == 1
+
+    def test_count_filters_by_gender(self, client):
+        # Only females (gender=1): age 30 and 60
+        response = client.get("/api/count?genders=1&datasets=cropped")
+        assert response.get_json()["count"] == 2
+
+    def test_count_zero_when_no_match(self, client):
+        response = client.get("/api/count?min_age=90&max_age=100&datasets=cropped")
+        assert response.status_code == 200
+        assert response.get_json()["count"] == 0
+
+    def test_count_filters_by_resolution(self, client_res):
+        response = client_res.get("/api/count?resolutions=high&datasets=cropped")
+        assert response.get_json()["count"] == 1
+
+    def test_count_invalid_age_returns_400(self, client):
+        response = client.get("/api/count?min_age=abc&datasets=cropped")
+        assert response.status_code == 400
+
+    def test_count_empty_datasets_returns_400(self, client):
+        response = client.get("/api/count?datasets=")
+        assert response.status_code == 400
+
+    def test_count_empty_resolutions_returns_400(self, client):
+        response = client.get("/api/count?resolutions=&datasets=cropped")
+        assert response.status_code == 400
+
+    def test_count_default_params(self, client):
+        # No params – uses all defaults; cropped dataset is present
+        response = client.get("/api/count")
+        assert response.status_code == 200
+        assert response.get_json()["count"] >= 0
 
 
 # ---------------------------------------------------------------------------

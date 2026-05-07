@@ -173,6 +173,70 @@ def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
 
 
 # ---------------------------------------------------------------------------
+# Filter helpers (shared by /api/random and /api/count)
+# ---------------------------------------------------------------------------
+
+
+def _parse_filter_params(
+    args: dict[str, str],
+) -> tuple[dict, str | None, int]:
+    """
+    Parse and validate common filter query parameters.
+
+    Returns (params_dict, error_message, http_status).
+    On success error_message is None and http_status is 200.
+    """
+    try:
+        min_age = int(args.get("min_age", 0))
+        max_age = int(args.get("max_age", 116))
+    except ValueError:
+        return {}, "min_age and max_age must be integers", 400
+
+    genders_raw = args.get("genders", "0,1")
+    races_raw = args.get("races", "0,1,2,3,4")
+    resolutions_raw = args.get("resolutions", "low,medium,high")
+    datasets_raw = args.get("datasets", "cropped,wild")
+
+    try:
+        genders = [int(g) for g in genders_raw.split(",") if g.strip()]
+        races = [int(r) for r in races_raw.split(",") if r.strip()]
+    except ValueError:
+        return {}, "genders and races must be comma-separated integers", 400
+
+    resolutions = [r.strip() for r in resolutions_raw.split(",") if r.strip()]
+    if not resolutions:
+        return {}, "At least one resolution must be specified", 400
+
+    datasets = [d.strip() for d in datasets_raw.split(",") if d.strip()]
+    if not datasets:
+        return {}, "At least one dataset must be specified", 400
+
+    return {
+        "min_age": min_age,
+        "max_age": max_age,
+        "genders": genders,
+        "races": races,
+        "resolutions": resolutions,
+        "datasets": datasets,
+    }, None, 200
+
+
+def _filter_candidates(
+    params: dict,
+) -> list[dict[str, str | int]]:
+    """Return all images matching the given filter parameters."""
+    index = _build_image_index(params["datasets"])
+    return [
+        img
+        for img in index
+        if (params["min_age"] <= img["age"] <= params["max_age"])
+        and (img["gender"] in params["genders"])
+        and (img["race"] in params["races"])
+        and (img["resolution"] in params["resolutions"])
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -204,6 +268,20 @@ def _register_routes(app: Flask) -> None:
 
         return jsonify({"error": "Image not found"}), 404
 
+    @app.route("/api/count")
+    def get_count():
+        """
+        Return the number of images matching the given filter criteria.
+
+        Query parameters: same as /api/random
+        """
+        params, error, status = _parse_filter_params(request.args)
+        if error:
+            return jsonify({"error": error}), status
+
+        count = len(_filter_candidates(params))
+        return jsonify({"count": count})
+
     @app.route("/api/random")
     def get_random():
         """
@@ -217,41 +295,11 @@ def _register_routes(app: Flask) -> None:
             resolutions  (comma-separated strings, default low,medium,high)
             datasets     (comma-separated strings, default cropped,wild)
         """
-        try:
-            min_age = int(request.args.get("min_age", 0))
-            max_age = int(request.args.get("max_age", 116))
-        except ValueError:
-            return jsonify({"error": "min_age and max_age must be integers"}), 400
+        params, error, status = _parse_filter_params(request.args)
+        if error:
+            return jsonify({"error": error}), status
 
-        genders_raw = request.args.get("genders", "0,1")
-        races_raw = request.args.get("races", "0,1,2,3,4")
-        resolutions_raw = request.args.get("resolutions", "low,medium,high")
-        datasets_raw = request.args.get("datasets", "cropped,wild")
-
-        try:
-            genders = [int(g) for g in genders_raw.split(",") if g.strip()]
-            races = [int(r) for r in races_raw.split(",") if r.strip()]
-        except ValueError:
-            return jsonify({"error": "genders and races must be comma-separated integers"}), 400
-
-        resolutions = [r.strip() for r in resolutions_raw.split(",") if r.strip()]
-        if not resolutions:
-            return jsonify({"error": "At least one resolution must be specified"}), 400
-
-        datasets = [d.strip() for d in datasets_raw.split(",") if d.strip()]
-        if not datasets:
-            return jsonify({"error": "At least one dataset must be specified"}), 400
-
-        index = _build_image_index(datasets)
-
-        candidates = [
-            img
-            for img in index
-            if (min_age <= img["age"] <= max_age)
-            and (img["gender"] in genders)
-            and (img["race"] in races)
-            and (img["resolution"] in resolutions)
-        ]
+        candidates = _filter_candidates(params)
 
         if not candidates:
             return jsonify({"error": "No images match the given criteria"}), 404
