@@ -170,24 +170,7 @@ class TestExtractArchive:
 
 
 class TestFixSwappedDatasetDirs:
-    def test_swaps_dirs_when_chip_files_are_in_wild_dir(self, tmp_path):
-        cropped_dir = tmp_path / "UTKFace"
-        wild_dir = tmp_path / "in-the-wild"
-        cropped_dir.mkdir()
-        wild_dir.mkdir()
-
-        (cropped_dir / "25_0_0_date.jpg").write_text("")
-        (wild_dir / "30_1_2_date.jpg.chip.jpg").write_text("")
-
-        with patch.object(manage, "DATA_DIR", tmp_path), patch.object(
-            manage, "DATASET_DIRS", {"cropped": cropped_dir, "wild": wild_dir}
-        ):
-            _fix_swapped_dataset_dirs()
-
-        assert (cropped_dir / "30_1_2_date.jpg.chip.jpg").exists()
-        assert (wild_dir / "25_0_0_date.jpg").exists()
-
-    def test_does_not_swap_when_dirs_already_match_heuristic_expectation(self, tmp_path):
+    def test_swaps_dirs_when_chip_files_are_in_cropped_dir(self, tmp_path):
         cropped_dir = tmp_path / "UTKFace"
         wild_dir = tmp_path / "in-the-wild"
         cropped_dir.mkdir()
@@ -201,8 +184,25 @@ class TestFixSwappedDatasetDirs:
         ):
             _fix_swapped_dataset_dirs()
 
-        assert (cropped_dir / "30_1_2_date.jpg.chip.jpg").exists()
-        assert (wild_dir / "25_0_0_date.jpg").exists()
+        assert (cropped_dir / "25_0_0_date.jpg").exists()
+        assert (wild_dir / "30_1_2_date.jpg.chip.jpg").exists()
+
+    def test_does_not_swap_when_dirs_already_match_heuristic_expectation(self, tmp_path):
+        cropped_dir = tmp_path / "UTKFace"
+        wild_dir = tmp_path / "in-the-wild"
+        cropped_dir.mkdir()
+        wild_dir.mkdir()
+
+        (cropped_dir / "25_0_0_date.jpg").write_text("")
+        (wild_dir / "30_1_2_date.jpg.chip.jpg").write_text("")
+
+        with patch.object(manage, "DATA_DIR", tmp_path), patch.object(
+            manage, "DATASET_DIRS", {"cropped": cropped_dir, "wild": wild_dir}
+        ):
+            _fix_swapped_dataset_dirs()
+
+        assert (cropped_dir / "25_0_0_date.jpg").exists()
+        assert (wild_dir / "30_1_2_date.jpg.chip.jpg").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -216,11 +216,11 @@ class TestDownloadCli:
                  "cropped": tmp_path / "UTKFace",
                  "wild": tmp_path / "in-the-wild",
              }), \
-             patch("manage.gdown.download") as mock_download, \
-             patch("manage._extract_archive") as mock_extract:
+            patch("manage.gdown.download") as mock_download, \
+            patch("manage._extract_archive") as mock_extract:
             result = runner.invoke(cli, ["download", "--datasets", "cropped"])
             assert result.exit_code == 0
-            assert mock_download.call_count == len(manage.CROPPED_PARTS)
+            assert mock_download.call_count == 1
 
     def test_download_wild_calls_gdown(self, runner, tmp_path):
         with patch.object(manage, "DATA_DIR", tmp_path), \
@@ -228,11 +228,11 @@ class TestDownloadCli:
                  "cropped": tmp_path / "UTKFace",
                  "wild": tmp_path / "in-the-wild",
              }), \
-             patch("manage.gdown.download") as mock_download, \
-             patch("manage._extract_archive") as mock_extract:
+            patch("manage.gdown.download") as mock_download, \
+            patch("manage._extract_archive") as mock_extract:
             result = runner.invoke(cli, ["download", "--datasets", "wild"])
             assert result.exit_code == 0
-            assert mock_download.call_count == 1
+            assert mock_download.call_count == len(manage.CROPPED_PARTS)
 
     def test_download_both_datasets_calls_gdown_for_all(self, runner, tmp_path):
         with patch.object(manage, "DATA_DIR", tmp_path), \
@@ -248,7 +248,7 @@ class TestDownloadCli:
             assert mock_download.call_count == len(manage.CROPPED_PARTS) + 1
 
     def test_download_skips_already_downloaded_archive(self, runner, tmp_path):
-        """If archive already exists on disk, gdown should not be called for it."""
+        """If dataset images already exist, download should be skipped."""
         with patch.object(manage, "DATA_DIR", tmp_path), \
              patch.object(manage, "DATASET_DIRS", {
                  "cropped": tmp_path / "UTKFace",
@@ -256,16 +256,14 @@ class TestDownloadCli:
              }), \
              patch("manage.gdown.download") as mock_download, \
              patch("manage._extract_archive") as mock_extract:
+            cropped_dir = tmp_path / "UTKFace"
+            cropped_dir.mkdir()
+            (cropped_dir / "25_0_0_date.jpg").write_text("")
 
-            # Pre-create the wild archive so it looks already downloaded
-            tmp_wild = tmp_path / "_tmp_wild"
-            tmp_wild.mkdir()
-            _, archive_name = manage.WILD_ARCHIVE
-            (tmp_wild / archive_name).write_bytes(b"existing")
-
-            result = runner.invoke(cli, ["download", "--datasets", "wild"])
+            result = runner.invoke(cli, ["download", "--datasets", "cropped"])
             assert result.exit_code == 0
             mock_download.assert_not_called()
+            mock_extract.assert_not_called()
 
     def test_unknown_dataset_is_ignored(self, runner, tmp_path):
         with patch.object(manage, "DATA_DIR", tmp_path), \

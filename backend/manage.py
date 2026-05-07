@@ -69,10 +69,16 @@ def download(datasets: str) -> None:
     selected = [d.strip() for d in datasets.split(",") if d.strip()]
 
     if "cropped" in selected:
-        _download_cropped()
+        if _has_images(DATASET_DIRS["cropped"]):
+            click.echo("  Cropped faces already present, skipping download.")
+        else:
+            _download_cropped()
 
     if "wild" in selected:
-        _download_wild()
+        if _has_images(DATASET_DIRS["wild"]):
+            click.echo("  Wild faces already present, skipping download.")
+        else:
+            _download_wild()
 
     _fix_swapped_dataset_dirs()
 
@@ -87,12 +93,40 @@ def download(datasets: str) -> None:
 
 
 def _download_cropped() -> None:
-    """Download and extract the aligned & cropped faces dataset."""
+    """Download and extract the dataset mapped to the cropped directory."""
     dest_dir = DATASET_DIRS["cropped"]
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    click.echo("\n→ Downloading cropped faces (3 parts)…")
+    click.echo("\n→ Downloading cropped faces…")
     tmp_dir = DATA_DIR / "_tmp_cropped"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        file_id, archive_name = WILD_ARCHIVE
+        archive_path = tmp_dir / archive_name
+        if archive_path.exists():
+            click.echo(f"  {archive_name} already downloaded, skipping.")
+        else:
+            click.echo(f"  Downloading {archive_name}…")
+            url = f"https://drive.google.com/uc?id={file_id}"
+            gdown.download(url, str(archive_path), quiet=False)
+
+        click.echo(f"  Extracting {archive_name}…")
+        _extract_archive(archive_path, dest_dir)
+
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    click.echo(f"  Cropped faces ready in {dest_dir}")
+
+
+def _download_wild() -> None:
+    """Download and extract the dataset mapped to the wild directory."""
+    dest_dir = DATASET_DIRS["wild"]
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    click.echo("\n→ Downloading in-the-wild faces (3 parts)…")
+    tmp_dir = DATA_DIR / "_tmp_wild"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -111,34 +145,18 @@ def _download_cropped() -> None:
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    click.echo(f"  Cropped faces ready in {dest_dir}")
-
-
-def _download_wild() -> None:
-    """Download and extract the in-the-wild faces dataset."""
-    dest_dir = DATASET_DIRS["wild"]
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    click.echo("\n→ Downloading in-the-wild faces…")
-    file_id, archive_name = WILD_ARCHIVE
-    tmp_dir = DATA_DIR / "_tmp_wild"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        archive_path = tmp_dir / archive_name
-        if archive_path.exists():
-            click.echo(f"  {archive_name} already downloaded, skipping.")
-        else:
-            url = f"https://drive.google.com/uc?id={file_id}"
-            gdown.download(url, str(archive_path), quiet=False)
-
-        click.echo(f"  Extracting {archive_name}…")
-        _extract_archive(archive_path, dest_dir)
-
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
     click.echo(f"  Wild faces ready in {dest_dir}")
+
+
+def _has_images(directory: Path) -> bool:
+    """Return True if *directory* contains at least one image file."""
+    if not directory.is_dir():
+        return False
+    valid_exts = {".jpg", ".jpeg", ".png"}
+    for path in directory.iterdir():
+        if path.is_file() and path.suffix.lower() in valid_exts:
+            return True
+    return False
 
 
 def _extract_archive(archive_path: Path, dest_dir: Path) -> None:
@@ -172,9 +190,9 @@ def _extract_archive(archive_path: Path, dest_dir: Path) -> None:
 
 def _looks_like_cropped(directory: Path, sample_size: int = 50) -> bool:
     """
-    Heuristic for aligned/cropped UTKFace files downloaded by this project.
+    Heuristic for the 3-part UTKFace archive split downloaded by this project.
 
-    The aligned/cropped archives commonly contain names like `...jpg.chip.jpg`.
+    That split commonly contains names like `...jpg.chip.jpg`.
     Returns True when such names are seen within the first *sample_size* images.
     """
     valid_exts = {".jpg", ".jpeg", ".png"}
@@ -204,9 +222,9 @@ def _fix_swapped_dataset_dirs() -> None:
     cropped_looks_cropped = _looks_like_cropped(cropped_dir)
     wild_looks_cropped = _looks_like_cropped(wild_dir)
 
-    # Swap only when cropped does NOT look cropped and wild DOES look cropped,
+    # Swap only when cropped looks like the 3-part split and wild does not,
     # which indicates the two datasets are reversed.
-    if cropped_looks_cropped or not wild_looks_cropped:
+    if not cropped_looks_cropped or wild_looks_cropped:
         return
 
     tmp_dir = DATA_DIR / f"_tmp_dataset_swap_{uuid4().hex}"
