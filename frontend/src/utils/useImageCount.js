@@ -67,7 +67,7 @@ export default function useImageCount(config, { debounceMs = 300 } = {}) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [depsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [depsKey, debounceMs]);
 
   return { count, loading, error };
 }

@@ -176,21 +176,31 @@ def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
 # Filter helpers (shared by /api/random and /api/count)
 # ---------------------------------------------------------------------------
 
+# Static error messages keyed by integer code so that no user-supplied string
+# can ever flow into an API error response.
+_FILTER_ERRORS: dict[int, str] = {
+    1: "min_age and max_age must be integers",
+    2: "genders and races must be comma-separated integers",
+    3: "At least one resolution must be specified",
+    4: "At least one dataset must be specified",
+}
+
 
 def _parse_filter_params(
     args: dict[str, str],
-) -> tuple[dict, str | None, int]:
+) -> tuple[dict, int | None, int]:
     """
     Parse and validate common filter query parameters.
 
-    Returns (params_dict, error_message, http_status).
-    On success error_message is None and http_status is 200.
+    Returns (params_dict, error_code, http_status).
+    On success error_code is None and http_status is 200.
+    Error messages for each code are in _FILTER_ERRORS.
     """
     try:
         min_age = int(args.get("min_age", 0))
         max_age = int(args.get("max_age", 116))
     except ValueError:
-        return {}, "min_age and max_age must be integers", 400
+        return {}, 1, 400
 
     genders_raw = args.get("genders", "0,1")
     races_raw = args.get("races", "0,1,2,3,4")
@@ -201,15 +211,15 @@ def _parse_filter_params(
         genders = [int(g) for g in genders_raw.split(",") if g.strip()]
         races = [int(r) for r in races_raw.split(",") if r.strip()]
     except ValueError:
-        return {}, "genders and races must be comma-separated integers", 400
+        return {}, 2, 400
 
     resolutions = [r.strip() for r in resolutions_raw.split(",") if r.strip()]
     if not resolutions:
-        return {}, "At least one resolution must be specified", 400
+        return {}, 3, 400
 
     datasets = [d.strip() for d in datasets_raw.split(",") if d.strip()]
     if not datasets:
-        return {}, "At least one dataset must be specified", 400
+        return {}, 4, 400
 
     return {
         "min_age": min_age,
@@ -275,9 +285,9 @@ def _register_routes(app: Flask) -> None:
 
         Query parameters: same as /api/random
         """
-        params, error, status = _parse_filter_params(request.args)
-        if error:
-            return jsonify({"error": error}), status
+        params, error_code, status = _parse_filter_params(request.args)
+        if error_code is not None:
+            return jsonify({"error": _FILTER_ERRORS[error_code]}), status
 
         count = len(_filter_candidates(params))
         return jsonify({"count": count})
@@ -295,9 +305,9 @@ def _register_routes(app: Flask) -> None:
             resolutions  (comma-separated strings, default low,medium,high)
             datasets     (comma-separated strings, default cropped,wild)
         """
-        params, error, status = _parse_filter_params(request.args)
-        if error:
-            return jsonify({"error": error}), status
+        params, error_code, status = _parse_filter_params(request.args)
+        if error_code is not None:
+            return jsonify({"error": _FILTER_ERRORS[error_code]}), status
 
         candidates = _filter_candidates(params)
 
