@@ -222,8 +222,8 @@ def _fix_swapped_dataset_dirs() -> None:
     cropped_looks_cropped = _looks_like_cropped(cropped_dir)
     wild_looks_cropped = _looks_like_cropped(wild_dir)
 
-    # Swap only when cropped looks like the 3-part split and wild does not,
-    # which indicates the two datasets are reversed.
+    # Expected mapping is: cropped -> single archive, wild -> 3-part split.
+    # Swap only when cropped looks like the 3-part split and wild does not.
     if not cropped_looks_cropped or wild_looks_cropped:
         return
 
