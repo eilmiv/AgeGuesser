@@ -27,12 +27,14 @@ DATA_DIR: Path = BASE_DIR / "data"
 
 CROPPED_PARTS: list[tuple[str, str]] = [
     # part1, part2, part3 of the aligned & cropped faces
+    # IDs sourced from the official UTKFace dataset page
     ("1mb5Z24TsnKI3ygNIlX6ZFiwUj0_PmpAW", "part1.tar.gz"),
     ("19vdaXVRtkP-nyxz1MYwXiFsh_m_OL72b", "part2.tar.gz"),
     ("1oj9ZWsLV2-k2idoW_nRSrLQLUP3hus3b", "part3.tar.gz"),
 ]
 
 WILD_ARCHIVE: tuple[str, str] = (
+    # ID sourced from the official UTKFace dataset page
     "1W-vm-rgSDsPA015wQQ9vWzquR_KvgBwe",
     "UTKFace_wild.tar.gz",
 )
