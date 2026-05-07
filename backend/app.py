@@ -176,31 +176,38 @@ def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
 # Filter helpers (shared by /api/random and /api/count)
 # ---------------------------------------------------------------------------
 
-# Static error messages keyed by integer code so that no user-supplied string
-# can ever flow into an API error response.
-_FILTER_ERRORS: dict[int, str] = {
-    1: "min_age and max_age must be integers",
-    2: "genders and races must be comma-separated integers",
-    3: "At least one resolution must be specified",
-    4: "At least one dataset must be specified",
-}
+# Typed exception classes for validation failures so that route handlers can
+# return completely static error-message literals with no tainted data flow.
+class _BadAgeParams(Exception):
+    """Raised when min_age / max_age cannot be parsed as integers."""
+
+class _BadGenderRaceParams(Exception):
+    """Raised when genders or races contain non-integer values."""
+
+class _EmptyResolutions(Exception):
+    """Raised when the resolutions list is empty after parsing."""
+
+class _EmptyDatasets(Exception):
+    """Raised when the datasets list is empty after parsing."""
 
 
 def _parse_filter_params(
     args: dict[str, str],
-) -> tuple[dict, int | None, int]:
+) -> dict:
     """
     Parse and validate common filter query parameters.
 
-    Returns (params_dict, error_code, http_status).
-    On success error_code is None and http_status is 200.
-    Error messages for each code are in _FILTER_ERRORS.
+    Returns a dict with keys: min_age, max_age, genders, races,
+    resolutions, datasets.
+
+    Raises a typed exception (no payload) on validation failure so that
+    callers can respond with fully static error-message literals.
     """
     try:
         min_age = int(args.get("min_age", 0))
         max_age = int(args.get("max_age", 116))
     except ValueError:
-        return {}, 1, 400
+        raise _BadAgeParams()
 
     genders_raw = args.get("genders", "0,1")
     races_raw = args.get("races", "0,1,2,3,4")
@@ -211,15 +218,15 @@ def _parse_filter_params(
         genders = [int(g) for g in genders_raw.split(",") if g.strip()]
         races = [int(r) for r in races_raw.split(",") if r.strip()]
     except ValueError:
-        return {}, 2, 400
+        raise _BadGenderRaceParams()
 
     resolutions = [r.strip() for r in resolutions_raw.split(",") if r.strip()]
     if not resolutions:
-        return {}, 3, 400
+        raise _EmptyResolutions()
 
     datasets = [d.strip() for d in datasets_raw.split(",") if d.strip()]
     if not datasets:
-        return {}, 4, 400
+        raise _EmptyDatasets()
 
     return {
         "min_age": min_age,
@@ -228,7 +235,7 @@ def _parse_filter_params(
         "races": races,
         "resolutions": resolutions,
         "datasets": datasets,
-    }, None, 200
+    }
 
 
 def _filter_candidates(
@@ -285,9 +292,16 @@ def _register_routes(app: Flask) -> None:
 
         Query parameters: same as /api/random
         """
-        params, error_code, status = _parse_filter_params(request.args)
-        if error_code is not None:
-            return jsonify({"error": _FILTER_ERRORS[error_code]}), status
+        try:
+            params = _parse_filter_params(request.args)
+        except _BadAgeParams:
+            return jsonify({"error": "min_age and max_age must be integers"}), 400
+        except _BadGenderRaceParams:
+            return jsonify({"error": "genders and races must be comma-separated integers"}), 400
+        except _EmptyResolutions:
+            return jsonify({"error": "At least one resolution must be specified"}), 400
+        except _EmptyDatasets:
+            return jsonify({"error": "At least one dataset must be specified"}), 400
 
         count = len(_filter_candidates(params))
         return jsonify({"count": count})
@@ -305,9 +319,16 @@ def _register_routes(app: Flask) -> None:
             resolutions  (comma-separated strings, default low,medium,high)
             datasets     (comma-separated strings, default cropped,wild)
         """
-        params, error_code, status = _parse_filter_params(request.args)
-        if error_code is not None:
-            return jsonify({"error": _FILTER_ERRORS[error_code]}), status
+        try:
+            params = _parse_filter_params(request.args)
+        except _BadAgeParams:
+            return jsonify({"error": "min_age and max_age must be integers"}), 400
+        except _BadGenderRaceParams:
+            return jsonify({"error": "genders and races must be comma-separated integers"}), 400
+        except _EmptyResolutions:
+            return jsonify({"error": "At least one resolution must be specified"}), 400
+        except _EmptyDatasets:
+            return jsonify({"error": "At least one dataset must be specified"}), 400
 
         candidates = _filter_candidates(params)
 

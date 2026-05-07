@@ -20,15 +20,14 @@ export default function useImageCount(config, { debounceMs = 300 } = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const resolutions = config.resolutions ?? ["low", "medium", "high"];
-
-  // Stringify deps to avoid object-identity churn in the effect dependency array.
+  // Resolve default and stringify all filter params for the effect dep array.
+  // Using JSON.stringify avoids object-identity churn on every render.
   const depsKey = JSON.stringify({
     minAge: config.minAge,
     maxAge: config.maxAge,
     genders: [...config.genders].sort(),
     races: [...config.races].sort(),
-    resolutions: [...resolutions].sort(),
+    resolutions: [...(config.resolutions ?? ["low", "medium", "high"])].sort(),
     datasets: [...config.datasets].sort(),
   });
 
