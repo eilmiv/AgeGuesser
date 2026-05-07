@@ -14,6 +14,7 @@ import os
 import re
 import random
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 from flask import Flask, jsonify, send_file, request
@@ -115,10 +116,6 @@ def _parse_filename(filename: str) -> dict[str, int] | None:
 _RESOLUTION_HIGH_THRESHOLD: int = 300
 _RESOLUTION_LOW_THRESHOLD: int = 100
 
-# Module-level cache: absolute path -> resolution label
-_resolution_cache: dict[Path, str] = {}
-
-
 def _classify_resolution(width: int, height: int) -> str:
     """Classify an image into 'low', 'medium', or 'high' based on its dimensions."""
     smaller = min(width, height)
@@ -129,25 +126,21 @@ def _classify_resolution(width: int, height: int) -> str:
     return "low"
 
 
+# LRU cache (max 65 536 entries) so each file path is read at most once per
+# process while preventing unbounded memory growth.
+@lru_cache(maxsize=65536)
 def _get_image_resolution(path: Path) -> str:
     """
     Return the resolution class ('low', 'medium', or 'high') for the image at
-    *path*, reading dimensions via Pillow.  Results are cached in memory so
-    each file is read at most once per process.
+    *path*, reading dimensions via Pillow.  Results are cached so each file is
+    read at most once per process.
     """
-    cached = _resolution_cache.get(path)
-    if cached is not None:
-        return cached
-
     try:
         with Image.open(path) as img:
             width, height = img.size
-        result = _classify_resolution(width, height)
+        return _classify_resolution(width, height)
     except Exception:
-        result = "medium"  # fallback for unreadable images
-
-    _resolution_cache[path] = result
-    return result
+        return "medium"  # fallback for unreadable images
 
 
 def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:

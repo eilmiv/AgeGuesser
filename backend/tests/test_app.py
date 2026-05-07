@@ -12,7 +12,6 @@ from app import (
     _build_image_index,
     _classify_resolution,
     _get_image_resolution,
-    _resolution_cache,
 )
 
 
@@ -124,12 +123,11 @@ def app_with_resolutions(tmp_path):
     import app as app_module
     original_data_dir = app_module.DATA_DIR
     original_dataset_dirs = app_module.DATASET_DIRS.copy()
-    original_cache = app_module._resolution_cache.copy()
 
     app_module.DATA_DIR = tmp_path
     app_module.DATASET_DIRS["cropped"] = cropped_dir
     app_module.DATASET_DIRS["wild"] = tmp_path / "in-the-wild"
-    app_module._resolution_cache.clear()
+    app_module._get_image_resolution.cache_clear()
 
     flask_app = create_app()
     flask_app.config["TESTING"] = True
@@ -138,8 +136,7 @@ def app_with_resolutions(tmp_path):
 
     app_module.DATA_DIR = original_data_dir
     app_module.DATASET_DIRS.update(original_dataset_dirs)
-    app_module._resolution_cache.clear()
-    app_module._resolution_cache.update(original_cache)
+    app_module._get_image_resolution.cache_clear()
 
 
 @pytest.fixture
@@ -340,24 +337,26 @@ class TestGetImageResolution:
         import app as app_module
         path = tmp_path / "test_high.png"
         _make_image(path, 400, 400)
-        app_module._resolution_cache.clear()
+        app_module._get_image_resolution.cache_clear()
         assert _get_image_resolution(path) == "high"
 
     def test_caches_result(self, tmp_path):
         import app as app_module
         path = tmp_path / "test_med.png"
         _make_image(path, 200, 200)
-        app_module._resolution_cache.clear()
+        app_module._get_image_resolution.cache_clear()
         result1 = _get_image_resolution(path)
         result2 = _get_image_resolution(path)
         assert result1 == result2 == "medium"
-        assert path in app_module._resolution_cache
+        # Verify the LRU cache has an entry
+        info = app_module._get_image_resolution.cache_info()
+        assert info.currsize > 0
 
     def test_fallback_for_non_image(self, tmp_path):
         import app as app_module
         path = tmp_path / "not_an_image.jpg"
         path.write_text("not an image")
-        app_module._resolution_cache.clear()
+        app_module._get_image_resolution.cache_clear()
         # Should return "medium" (fallback) without raising
         assert _get_image_resolution(path) == "medium"
 
