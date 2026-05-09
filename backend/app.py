@@ -51,7 +51,7 @@ def create_app() -> Flask:
         "AGEGUESSER_SECRET_KEY",
         "ageguesser-dev-secret",
     )
-    CORS(app)
+    CORS(app, supports_credentials=True)
 
     _check_dataset()
     _register_routes(app)

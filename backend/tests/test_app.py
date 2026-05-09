@@ -663,6 +663,20 @@ class TestImageEndpoint:
 
 
 class TestAdminCurationEndpoints:
+    def test_admin_login_preflight_allows_credentials(self, admin_client):
+        response = admin_client.open(
+            "/api/admin/login",
+            method="OPTIONS",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers.get("Access-Control-Allow-Origin") == "http://localhost:3000"
+        assert response.headers.get("Access-Control-Allow-Credentials") == "true"
+
     def test_admin_login_and_status(self, admin_client):
         status_before = admin_client.get("/api/admin/status")
         assert status_before.get_json()["logged_in"] is False
