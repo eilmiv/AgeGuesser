@@ -52,7 +52,8 @@ describe("AdminView", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Logged in as admin/i)).toBeInTheDocument();
-      expect(screen.getAllByText(/cropped/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/1 images/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /preview/i })).toBeInTheDocument();
     });
   });
 });

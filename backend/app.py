@@ -38,6 +38,7 @@ DATASET_DIRS: dict[str, Path] = {
 CUSTOM_DATASET_ROOT: str = "custom-datasets"
 DATASET_METADATA_FILE: str = "_metadata.json"
 ADMIN_ACCOUNTS_FILE: str = "admins.json"
+MAX_UPLOAD_FILENAME_STEM_LENGTH: int = 40
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -72,8 +73,8 @@ def _custom_dataset_root() -> Path:
     return DATA_DIR / CUSTOM_DATASET_ROOT
 
 
-def _dataset_metadata_path(dataset: str) -> Path:
-    return _get_dataset_dir(dataset, create_if_missing=True) / DATASET_METADATA_FILE
+def _dataset_metadata_path(dataset: str, create_if_missing: bool = False) -> Path:
+    return _get_dataset_dir(dataset, create_if_missing=create_if_missing) / DATASET_METADATA_FILE
 
 
 def _admins_file_path() -> Path:
@@ -95,14 +96,24 @@ def _get_dataset_dir(dataset: str, create_if_missing: bool = False) -> Path:
         return DATASET_DIRS[dataset]
     if not _is_safe_dataset_name(dataset):
         raise ValueError("Invalid dataset name")
-    directory = _custom_dataset_root() / dataset
+    if not create_if_missing:
+        known_dirs = _get_dataset_dirs()
+        if dataset not in known_dirs:
+            raise ValueError("Unknown dataset")
+        return known_dirs[dataset]
+    custom_root = _custom_dataset_root().resolve()
+    directory = (custom_root / dataset).resolve()
+    try:
+        directory.relative_to(custom_root)
+    except ValueError as exc:
+        raise ValueError("Invalid dataset name") from exc
     if create_if_missing:
         directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
 def _load_dataset_metadata(dataset: str) -> dict[str, dict[str, int | str]]:
-    path = _dataset_metadata_path(dataset)
+    path = _dataset_metadata_path(dataset, create_if_missing=False)
     if not path.is_file():
         return {}
     try:
@@ -131,7 +142,7 @@ def _load_dataset_metadata(dataset: str) -> dict[str, dict[str, int | str]]:
 
 
 def _save_dataset_metadata(dataset: str, metadata: dict[str, dict[str, int | str]]) -> None:
-    path = _dataset_metadata_path(dataset)
+    path = _dataset_metadata_path(dataset, create_if_missing=True)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -257,7 +268,10 @@ def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
     for ds in datasets:
         if not _is_safe_dataset_name(ds):
             continue
-        directory = _get_dataset_dir(ds)
+        try:
+            directory = _get_dataset_dir(ds)
+        except ValueError:
+            continue
         if not directory.is_dir():
             continue
         metadata = _load_dataset_metadata(ds)
@@ -305,6 +319,10 @@ class _EmptyResolutions(Exception):
 
 class _EmptyDatasets(Exception):
     """Raised when the datasets list is empty after parsing."""
+
+
+class _BadImageMetadata(Exception):
+    """Raised when image metadata is invalid."""
 
 
 def _parse_filter_params(
@@ -370,6 +388,8 @@ def _filter_candidates(
 
 
 def _years_between_dates(start: date, end: date) -> int:
+    if end < start:
+        raise _BadImageMetadata()
     years = end.year - start.year
     if (end.month, end.day) < (start.month, start.day):
         years -= 1
@@ -379,18 +399,18 @@ def _years_between_dates(start: date, end: date) -> int:
 def _parse_add_image_metadata(form: dict[str, str]) -> dict[str, int | str]:
     age_mode = form.get("age_mode", "")
     if age_mode not in {"years", "dob_taken", "dob_uploaded_years"}:
-        raise ValueError("Invalid age mode")
+        raise _BadImageMetadata()
 
     try:
         gender = int(form.get("gender", ""))
         race = int(form.get("race", ""))
     except ValueError as exc:
-        raise ValueError("gender and race must be integers") from exc
+        raise _BadImageMetadata() from exc
 
     if gender not in {0, 1}:
-        raise ValueError("gender must be 0 or 1")
+        raise _BadImageMetadata()
     if race not in {0, 1, 2, 3, 4}:
-        raise ValueError("race must be 0,1,2,3,4")
+        raise _BadImageMetadata()
 
     dob_raw = form.get("dob", "")
     picture_date_raw = form.get("picture_date", "")
@@ -400,26 +420,36 @@ def _parse_add_image_metadata(form: dict[str, str]) -> dict[str, int | str]:
         try:
             age = int(form.get("age", ""))
         except ValueError as exc:
-            raise ValueError("age must be an integer") from exc
+            raise _BadImageMetadata() from exc
     elif age_mode == "dob_taken":
         if not dob_raw or not picture_date_raw:
-            raise ValueError("dob and picture_date are required")
-        dob = date.fromisoformat(dob_raw)
-        picture_date = date.fromisoformat(picture_date_raw)
+            raise _BadImageMetadata()
+        try:
+            dob = date.fromisoformat(dob_raw)
+            picture_date = date.fromisoformat(picture_date_raw)
+        except ValueError as exc:
+            raise _BadImageMetadata() from exc
         if picture_date < dob:
-            raise ValueError("picture_date must be on/after dob")
+            raise _BadImageMetadata()
         age = _years_between_dates(dob, picture_date)
     else:
         if not dob_raw:
-            raise ValueError("dob is required")
-        date.fromisoformat(dob_raw)
+            raise _BadImageMetadata()
+        try:
+            dob = date.fromisoformat(dob_raw)
+        except ValueError as exc:
+            raise _BadImageMetadata() from exc
+        if dob > date.today():
+            raise _BadImageMetadata()
         try:
             age = int(years_old_raw)
         except ValueError as exc:
-            raise ValueError("years_old_at_upload must be an integer") from exc
+            raise _BadImageMetadata() from exc
+        if age > _years_between_dates(dob, date.today()):
+            raise _BadImageMetadata()
 
     if age < 0 or age > 116:
-        raise ValueError("age must be between 0 and 116")
+        raise _BadImageMetadata()
 
     return {
         "age_mode": age_mode,
@@ -496,7 +526,10 @@ def _register_routes(app: Flask) -> None:
             return jsonify({"error": "Unauthorized"}), 401
         if not _is_safe_dataset_name(dataset):
             return jsonify({"error": "Invalid dataset"}), 400
-        directory = _get_dataset_dir(dataset)
+        try:
+            directory = _get_dataset_dir(dataset)
+        except ValueError:
+            return jsonify({"error": "Dataset not found"}), 404
         if not directory.is_dir():
             return jsonify({"error": "Dataset not found"}), 404
         try:
@@ -534,11 +567,15 @@ def _register_routes(app: Flask) -> None:
 
         try:
             metadata = _parse_add_image_metadata(request.form)
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+        except _BadImageMetadata:
+            return jsonify({"error": "Invalid image metadata"}), 400
 
         directory = _get_dataset_dir(dataset, create_if_missing=True)
-        stem = re.sub(r"[^A-Za-z0-9_\-]", "_", Path(upload.filename).stem)[:40] or "image"
+        stem = (
+            re.sub(r"[^A-Za-z0-9_\-]", "_", Path(upload.filename).stem)
+            [:MAX_UPLOAD_FILENAME_STEM_LENGTH]
+            or "image"
+        )
         filename = f"{stem}_{uuid4().hex[:8]}{ext}"
         destination = directory / filename
         upload.save(destination)
@@ -565,7 +602,10 @@ def _register_routes(app: Flask) -> None:
         if not _is_safe_dataset_name(dataset):
             return jsonify({"error": "Unknown dataset"}), 404
 
-        directory = _get_dataset_dir(dataset)
+        try:
+            directory = _get_dataset_dir(dataset)
+        except ValueError:
+            return jsonify({"error": "Unknown dataset"}), 404
         if not directory.is_dir():
             return jsonify({"error": "Unknown dataset"}), 404
 

@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import "./AdminView.css";
 
 const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000";
-const LAST_METADATA_KEY = "ageguesser_admin_last_metadata";
 
 const DEFAULT_METADATA = {
   gender: "0",
@@ -14,21 +13,6 @@ const DEFAULT_METADATA = {
   yearsOldAtUpload: "",
 };
 
-function readLastMetadata() {
-  try {
-    const raw = localStorage.getItem(LAST_METADATA_KEY);
-    if (!raw) return DEFAULT_METADATA;
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_METADATA, ...parsed };
-  } catch {
-    return DEFAULT_METADATA;
-  }
-}
-
-function persistLastMetadata(metadata) {
-  localStorage.setItem(LAST_METADATA_KEY, JSON.stringify(metadata));
-}
-
 export default function AdminView({ onBack }) {
   const [status, setStatus] = useState({ loading: true, loggedIn: false, username: null });
   const [credentials, setCredentials] = useState({ username: "", password: "" });
@@ -37,7 +21,7 @@ export default function AdminView({ onBack }) {
   const [selectedDataset, setSelectedDataset] = useState("");
   const [previewImages, setPreviewImages] = useState([]);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [form, setForm] = useState(() => ({ ...readLastMetadata(), dataset: "" }));
+  const [form, setForm] = useState({ ...DEFAULT_METADATA, dataset: "" });
   const [selectedFile, setSelectedFile] = useState(null);
   const [submitError, setSubmitError] = useState("");
   const [submitMessage, setSubmitMessage] = useState("");
@@ -185,7 +169,7 @@ export default function AdminView({ onBack }) {
       pictureDate: form.pictureDate,
       yearsOldAtUpload: form.yearsOldAtUpload,
     };
-    persistLastMetadata(metadataToRemember);
+    setForm((prev) => ({ ...metadataToRemember, dataset: prev.dataset }));
     setSelectedFile(null);
     setSubmitMessage("Image added");
     await loadDatasets();
@@ -285,7 +269,10 @@ export default function AdminView({ onBack }) {
             <input
               type="file"
               accept="image/png,image/jpeg,image/jpg"
-              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              onChange={(e) => {
+                setSelectedFile(e.target.files?.[0] || null);
+                setSubmitMessage(e.target.files?.[0] ? "File selected" : "");
+              }}
             />
           </label>
           <p className="admin-hint">Tip: you can also paste an image from the clipboard in this panel.</p>
@@ -311,7 +298,7 @@ export default function AdminView({ onBack }) {
                 <option value="1">Black</option>
                 <option value="2">Asian</option>
                 <option value="3">Indian</option>
-                <option value="4">Other</option>
+                <option value="4">Others</option>
               </select>
             </label>
           </div>
