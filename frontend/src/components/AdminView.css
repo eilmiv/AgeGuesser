@@ -1,0 +1,88 @@
+.admin-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-login-form,
+.admin-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-login-form label,
+.admin-add-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dataset-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dataset-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-hint {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.admin-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.admin-error {
+  color: var(--danger);
+}
+
+.admin-success {
+  color: var(--success);
+}
+
+.admin-preview-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.admin-preview-grid figure {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+}
+
+.admin-preview-grid img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+}
+
+.admin-preview-grid figcaption {
+  font-size: 0.75rem;
+  padding: 6px;
+}

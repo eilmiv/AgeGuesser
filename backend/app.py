@@ -14,12 +14,16 @@ import os
 import re
 import random
 import sys
+import json
 from functools import lru_cache
 from pathlib import Path
+from uuid import uuid4
+from datetime import date
 
-from flask import Flask, jsonify, send_file, request
+from flask import Flask, jsonify, send_file, request, session
 from flask_cors import CORS
 from PIL import Image
+from werkzeug.security import check_password_hash
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -31,6 +35,9 @@ DATASET_DIRS: dict[str, Path] = {
     "cropped": DATA_DIR / "UTKFace",
     "wild": DATA_DIR / "in-the-wild",
 }
+CUSTOM_DATASET_ROOT: str = "custom-datasets"
+DATASET_METADATA_FILE: str = "_metadata.json"
+ADMIN_ACCOUNTS_FILE: str = "admins.json"
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -39,6 +46,10 @@ DATASET_DIRS: dict[str, Path] = {
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    app.config["SECRET_KEY"] = os.environ.get(
+        "AGEGUESSER_SECRET_KEY",
+        "ageguesser-dev-secret",
+    )
     CORS(app)
 
     _check_dataset()
@@ -53,11 +64,104 @@ def create_app() -> Flask:
 VALID_IMAGE_EXTENSIONS: set[str] = {".jpg", ".jpeg", ".png"}
 
 
+def _is_safe_dataset_name(dataset: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9_\-]+", dataset))
+
+
+def _custom_dataset_root() -> Path:
+    return DATA_DIR / CUSTOM_DATASET_ROOT
+
+
+def _dataset_metadata_path(dataset: str) -> Path:
+    return _get_dataset_dir(dataset, create_if_missing=True) / DATASET_METADATA_FILE
+
+
+def _admins_file_path() -> Path:
+    return DATA_DIR / ADMIN_ACCOUNTS_FILE
+
+
+def _get_dataset_dirs() -> dict[str, Path]:
+    dataset_dirs = DATASET_DIRS.copy()
+    custom_root = _custom_dataset_root()
+    if custom_root.is_dir():
+        for entry in custom_root.iterdir():
+            if entry.is_dir() and _is_safe_dataset_name(entry.name):
+                dataset_dirs[entry.name] = entry
+    return dataset_dirs
+
+
+def _get_dataset_dir(dataset: str, create_if_missing: bool = False) -> Path:
+    if dataset in DATASET_DIRS:
+        return DATASET_DIRS[dataset]
+    if not _is_safe_dataset_name(dataset):
+        raise ValueError("Invalid dataset name")
+    directory = _custom_dataset_root() / dataset
+    if create_if_missing:
+        directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def _load_dataset_metadata(dataset: str) -> dict[str, dict[str, int | str]]:
+    path = _dataset_metadata_path(dataset)
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+
+    data: dict[str, dict[str, int | str]] = {}
+    for filename, meta in payload.items():
+        if isinstance(filename, str) and isinstance(meta, dict):
+            try:
+                data[filename] = {
+                    "age": int(meta["age"]),
+                    "gender": int(meta["gender"]),
+                    "race": int(meta["race"]),
+                    "age_mode": str(meta.get("age_mode", "years")),
+                    "dob": str(meta.get("dob", "")),
+                    "picture_date": str(meta.get("picture_date", "")),
+                    "years_old_at_upload": str(meta.get("years_old_at_upload", "")),
+                }
+            except (KeyError, TypeError, ValueError):
+                continue
+    return data
+
+
+def _save_dataset_metadata(dataset: str, metadata: dict[str, dict[str, int | str]]) -> None:
+    path = _dataset_metadata_path(dataset)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _load_admins() -> dict[str, str]:
+    path = _admins_file_path()
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        str(username): str(password_hash)
+        for username, password_hash in payload.items()
+    }
+
+
+def _is_logged_in_admin() -> bool:
+    username = session.get("admin_username")
+    return isinstance(username, str) and username in _load_admins()
+
+
 def _check_dataset() -> None:
     """Warn on startup if no dataset images are found."""
     found = any(
         path.is_dir() and bool(_list_images(path))
-        for path in DATASET_DIRS.values()
+        for path in _get_dataset_dirs().values()
     )
 
     if not found:
@@ -151,11 +255,23 @@ def _build_image_index(datasets: list[str]) -> list[dict[str, str | int]]:
     """
     index: list[dict[str, str | int]] = []
     for ds in datasets:
-        directory = DATASET_DIRS.get(ds)
-        if directory is None or not directory.is_dir():
+        if not _is_safe_dataset_name(ds):
             continue
+        directory = _get_dataset_dir(ds)
+        if not directory.is_dir():
+            continue
+        metadata = _load_dataset_metadata(ds)
         for filename in _list_images(directory):
-            meta = _parse_filename(filename)
+            meta_from_file = _parse_filename(filename)
+            meta: dict[str, int] | None
+            if filename in metadata:
+                meta = {
+                    "age": int(metadata[filename]["age"]),
+                    "gender": int(metadata[filename]["gender"]),
+                    "race": int(metadata[filename]["race"]),
+                }
+            else:
+                meta = meta_from_file
             if meta is None:
                 continue
             resolution = _get_image_resolution(directory / filename)
@@ -253,6 +369,69 @@ def _filter_candidates(
     ]
 
 
+def _years_between_dates(start: date, end: date) -> int:
+    years = end.year - start.year
+    if (end.month, end.day) < (start.month, start.day):
+        years -= 1
+    return years
+
+
+def _parse_add_image_metadata(form: dict[str, str]) -> dict[str, int | str]:
+    age_mode = form.get("age_mode", "")
+    if age_mode not in {"years", "dob_taken", "dob_uploaded_years"}:
+        raise ValueError("Invalid age mode")
+
+    try:
+        gender = int(form.get("gender", ""))
+        race = int(form.get("race", ""))
+    except ValueError as exc:
+        raise ValueError("gender and race must be integers") from exc
+
+    if gender not in {0, 1}:
+        raise ValueError("gender must be 0 or 1")
+    if race not in {0, 1, 2, 3, 4}:
+        raise ValueError("race must be 0,1,2,3,4")
+
+    dob_raw = form.get("dob", "")
+    picture_date_raw = form.get("picture_date", "")
+    years_old_raw = form.get("years_old_at_upload", "")
+
+    if age_mode == "years":
+        try:
+            age = int(form.get("age", ""))
+        except ValueError as exc:
+            raise ValueError("age must be an integer") from exc
+    elif age_mode == "dob_taken":
+        if not dob_raw or not picture_date_raw:
+            raise ValueError("dob and picture_date are required")
+        dob = date.fromisoformat(dob_raw)
+        picture_date = date.fromisoformat(picture_date_raw)
+        if picture_date < dob:
+            raise ValueError("picture_date must be on/after dob")
+        age = _years_between_dates(dob, picture_date)
+    else:
+        if not dob_raw:
+            raise ValueError("dob is required")
+        date.fromisoformat(dob_raw)
+        try:
+            age = int(years_old_raw)
+        except ValueError as exc:
+            raise ValueError("years_old_at_upload must be an integer") from exc
+
+    if age < 0 or age > 116:
+        raise ValueError("age must be between 0 and 116")
+
+    return {
+        "age_mode": age_mode,
+        "age": age,
+        "gender": gender,
+        "race": race,
+        "dob": dob_raw,
+        "picture_date": picture_date_raw,
+        "years_old_at_upload": years_old_raw,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -264,17 +443,135 @@ def _register_routes(app: Flask) -> None:
     def health():
         return jsonify({"status": "ok"})
 
+    @app.route("/api/datasets")
+    def list_datasets():
+        items = []
+        for name, directory in sorted(_get_dataset_dirs().items()):
+            image_count = len(_list_images(directory))
+            items.append(
+                {
+                    "name": name,
+                    "count": image_count,
+                    "is_default": name in DATASET_DIRS,
+                }
+            )
+        return jsonify({"datasets": items})
+
+    @app.route("/api/admin/status")
+    def admin_status():
+        username = session.get("admin_username") if _is_logged_in_admin() else None
+        return jsonify(
+            {
+                "logged_in": bool(username),
+                "username": username,
+            }
+        )
+
+    @app.route("/api/admin/login", methods=["POST"])
+    def admin_login():
+        data = request.get_json(silent=True) or {}
+        username = str(data.get("username", "")).strip()
+        password = str(data.get("password", ""))
+        admins = _load_admins()
+        password_hash = admins.get(username)
+        if not password_hash or not check_password_hash(password_hash, password):
+            return jsonify({"error": "Invalid username or password"}), 401
+        session["admin_username"] = username
+        return jsonify({"ok": True, "username": username})
+
+    @app.route("/api/admin/logout", methods=["POST"])
+    def admin_logout():
+        session.pop("admin_username", None)
+        return jsonify({"ok": True})
+
+    @app.route("/api/admin/datasets")
+    def admin_list_datasets():
+        if not _is_logged_in_admin():
+            return jsonify({"error": "Unauthorized"}), 401
+        return list_datasets()
+
+    @app.route("/api/admin/datasets/<dataset>/preview")
+    def admin_dataset_preview(dataset: str):
+        if not _is_logged_in_admin():
+            return jsonify({"error": "Unauthorized"}), 401
+        if not _is_safe_dataset_name(dataset):
+            return jsonify({"error": "Invalid dataset"}), 400
+        directory = _get_dataset_dir(dataset)
+        if not directory.is_dir():
+            return jsonify({"error": "Dataset not found"}), 404
+        try:
+            limit = int(request.args.get("limit", 24))
+        except ValueError:
+            return jsonify({"error": "limit must be an integer"}), 400
+        limit = max(1, min(limit, 100))
+        indexed = _build_image_index([dataset])
+        preview = [
+            {
+                "filename": item["filename"],
+                "age": item["age"],
+                "gender": item["gender"],
+                "race": item["race"],
+                "url": f"/api/image/{dataset}/{item['filename']}",
+            }
+            for item in indexed[:limit]
+        ]
+        return jsonify({"dataset": dataset, "images": preview})
+
+    @app.route("/api/admin/datasets/<dataset>/add-image", methods=["POST"])
+    def admin_add_dataset_image(dataset: str):
+        if not _is_logged_in_admin():
+            return jsonify({"error": "Unauthorized"}), 401
+        if not _is_safe_dataset_name(dataset):
+            return jsonify({"error": "Invalid dataset name"}), 400
+
+        upload = request.files.get("image")
+        if upload is None or not upload.filename:
+            return jsonify({"error": "image file is required"}), 400
+
+        ext = Path(upload.filename).suffix.lower()
+        if ext not in VALID_IMAGE_EXTENSIONS:
+            return jsonify({"error": "Unsupported image format"}), 400
+
+        try:
+            metadata = _parse_add_image_metadata(request.form)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        directory = _get_dataset_dir(dataset, create_if_missing=True)
+        stem = re.sub(r"[^A-Za-z0-9_\-]", "_", Path(upload.filename).stem)[:40] or "image"
+        filename = f"{stem}_{uuid4().hex[:8]}{ext}"
+        destination = directory / filename
+        upload.save(destination)
+        _get_image_resolution.cache_clear()
+
+        metadata_map = _load_dataset_metadata(dataset)
+        metadata_map[filename] = metadata
+        _save_dataset_metadata(dataset, metadata_map)
+
+        return jsonify(
+            {
+                "dataset": dataset,
+                "filename": filename,
+                "age": metadata["age"],
+                "gender": metadata["gender"],
+                "race": metadata["race"],
+                "url": f"/api/image/{dataset}/{filename}",
+            }
+        )
+
     @app.route("/api/image/<dataset>/<filename>")
     def get_image(dataset: str, filename: str):
         """Serve a single image file from the dataset."""
-        if dataset not in DATASET_DIRS:
+        if not _is_safe_dataset_name(dataset):
+            return jsonify({"error": "Unknown dataset"}), 404
+
+        directory = _get_dataset_dir(dataset)
+        if not directory.is_dir():
             return jsonify({"error": "Unknown dataset"}), 404
 
         # Quick pre-validation: reject filenames with unsafe characters.
         if not re.fullmatch(r"[A-Za-z0-9._\-]+", filename):
             return jsonify({"error": "Forbidden"}), 403
-
-        directory = DATASET_DIRS[dataset]
 
         # Look up the file by listing the directory.  We intentionally use the
         # filesystem-sourced name (known_filename) in the path construction –

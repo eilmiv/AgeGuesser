@@ -14,9 +14,11 @@ It uses the [UTKFace](https://susanqq.github.io/UTKFace/) dataset (both aligned/
 
 ### Backend
 - **Dataset management command** – downloads and prepares the UTKFace dataset (cropped + in-the-wild)
+- **Admin curation commands** – create admin accounts via `python manage.py create-admin`
 - **Startup warning** – clear error message with instructions when the dataset has not been downloaded yet
 - **`GET /api/image/<dataset>/<filename>`** – serve a single face image
 - **`GET /api/random`** – pick a random image matching age range, gender, race, resolution and dataset filters
+- **Admin curation API** – login, list datasets, preview datasets, and add images to custom datasets
 
 ### Frontend
 - **All state stored in the browser** (`localStorage`) – no account or database needed
@@ -117,7 +119,16 @@ Returns the number of images matching the given criteria. Accepts the same query
 ```
 
 ### `GET /api/image/<dataset>/<filename>`
-Serves the raw image file. `dataset` is either `cropped` or `wild`.
+Serves the raw image file. `dataset` can be `cropped`, `wild`, or any curated custom dataset.
+
+### Admin curation endpoints
+
+- `POST /api/admin/login` – admin login
+- `POST /api/admin/logout` – admin logout
+- `GET /api/admin/status` – current admin login status
+- `GET /api/admin/datasets` – list datasets with image counts
+- `GET /api/admin/datasets/<dataset>/preview` – preview dataset images
+- `POST /api/admin/datasets/<dataset>/add-image` – upload an image + metadata
 
 ## Development
 

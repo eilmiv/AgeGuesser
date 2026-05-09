@@ -3,6 +3,7 @@ import ConfigList from "./components/ConfigList";
 import ConfigForm from "./components/ConfigForm";
 import RunView from "./components/RunView";
 import SummaryView from "./components/SummaryView";
+import AdminView from "./components/AdminView";
 import { loadConfigs, upsertConfig, deleteConfig, appendRunHistory } from "./utils/storage";
 import "./App.css";
 
@@ -12,6 +13,7 @@ import "./App.css";
  *   "form"    – create / edit a configuration
  *   "run"     – actively running a configuration
  *   "summary" – show the summary after a completed run
+ *   "admin"   – curate custom datasets
  */
 export default function App() {
   const [view, setView] = useState("list");
@@ -83,6 +85,11 @@ export default function App() {
         <h1 className="app-title" onClick={handleBackToList} title="Back to configurations">
           🧑 AgeGuesser
         </h1>
+        {view !== "admin" && (
+          <button className="btn btn-ghost" onClick={() => setView("admin")}>
+            Admin
+          </button>
+        )}
         {view !== "list" && view !== "form" && (
           <button className="btn btn-ghost" onClick={handleBackToList}>
             ← Back
@@ -123,6 +130,10 @@ export default function App() {
             onDone={handleBackToList}
             onRunAgain={() => handleRunConfig(activeConfig)}
           />
+        )}
+
+        {view === "admin" && (
+          <AdminView onBack={handleBackToList} />
         )}
       </main>
     </div>

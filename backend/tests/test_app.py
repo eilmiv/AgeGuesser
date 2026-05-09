@@ -2,9 +2,12 @@
 Tests for the AgeGuesser Flask backend.
 """
 
+import io
+import json
 import pytest
 from pathlib import Path
 from PIL import Image as PILImage
+from werkzeug.security import generate_password_hash
 from app import (
     create_app,
     _parse_filename,
@@ -148,6 +151,44 @@ def app_with_resolutions(tmp_path):
 @pytest.fixture
 def client_res(app_with_resolutions):
     return app_with_resolutions.test_client()
+
+
+@pytest.fixture
+def app_with_admin(tmp_path):
+    """Flask app with one admin account and writable data dir."""
+    cropped_dir = tmp_path / "UTKFace"
+    cropped_dir.mkdir()
+    (cropped_dir / "25_0_0_20170110183900092.jpg").write_text("fake image data")
+
+    admins_file = tmp_path / "admins.json"
+    admins_file.write_text(
+        json.dumps({"admin": generate_password_hash("supersecret")}),
+        encoding="utf-8",
+    )
+
+    import app as app_module
+    original_data_dir = app_module.DATA_DIR
+    original_dataset_dirs = app_module.DATASET_DIRS.copy()
+    original_secret = app_module.app.config.get("SECRET_KEY")
+
+    app_module.DATA_DIR = tmp_path
+    app_module.DATASET_DIRS["cropped"] = cropped_dir
+    app_module.DATASET_DIRS["wild"] = tmp_path / "in-the-wild"
+
+    flask_app = create_app()
+    flask_app.config["TESTING"] = True
+    flask_app.config["SECRET_KEY"] = "test-secret"
+
+    yield flask_app
+
+    app_module.DATA_DIR = original_data_dir
+    app_module.DATASET_DIRS.update(original_dataset_dirs)
+    app_module.app.config["SECRET_KEY"] = original_secret
+
+
+@pytest.fixture
+def admin_client(app_with_admin):
+    return app_with_admin.test_client()
 
 
 # ---------------------------------------------------------------------------
@@ -619,3 +660,71 @@ class TestImageEndpoint:
     def test_wild_dataset_missing_file(self, client):
         response = client.get("/api/image/wild/99_0_0_missing.jpg")
         assert response.status_code == 404
+
+
+class TestAdminCurationEndpoints:
+    def test_admin_login_and_status(self, admin_client):
+        status_before = admin_client.get("/api/admin/status")
+        assert status_before.get_json()["logged_in"] is False
+
+        login = admin_client.post(
+            "/api/admin/login",
+            json={"username": "admin", "password": "supersecret"},
+        )
+        assert login.status_code == 200
+        assert login.get_json()["username"] == "admin"
+
+        status_after = admin_client.get("/api/admin/status")
+        assert status_after.get_json()["logged_in"] is True
+        assert status_after.get_json()["username"] == "admin"
+
+    def test_admin_dataset_list_includes_default_datasets(self, admin_client):
+        admin_client.post(
+            "/api/admin/login",
+            json={"username": "admin", "password": "supersecret"},
+        )
+        response = admin_client.get("/api/admin/datasets")
+        assert response.status_code == 200
+        datasets = {item["name"] for item in response.get_json()["datasets"]}
+        assert "cropped" in datasets
+        assert "wild" in datasets
+
+    def test_add_image_to_custom_dataset_and_fetch_random(self, admin_client):
+        admin_client.post(
+            "/api/admin/login",
+            json={"username": "admin", "password": "supersecret"},
+        )
+
+        image = PILImage.new("RGB", (160, 160), color=(200, 20, 20))
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format="PNG")
+        image_bytes.seek(0)
+
+        create = admin_client.get(
+            "/api/admin/datasets/my_custom/preview"
+        )
+        assert create.status_code == 404
+
+        response = admin_client.post(
+            "/api/admin/datasets/my_custom/add-image",
+            data={
+                "image": (image_bytes, "new-face.png"),
+                "age_mode": "years",
+                "age": "33",
+                "gender": "1",
+                "race": "2",
+            },
+            content_type="multipart/form-data",
+        )
+        assert response.status_code == 200
+
+        preview = admin_client.get("/api/admin/datasets/my_custom/preview")
+        assert preview.status_code == 200
+        assert len(preview.get_json()["images"]) == 1
+
+        random_response = admin_client.get("/api/random?datasets=my_custom")
+        assert random_response.status_code == 200
+        payload = random_response.get_json()
+        assert payload["age"] == 33
+        assert payload["gender"] == 1
+        assert payload["race"] == 2

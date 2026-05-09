@@ -10,11 +10,14 @@ from __future__ import annotations
 import shutil
 import tarfile
 import zipfile
+import json
+import re
 from pathlib import Path
 from uuid import uuid4
 
 import click
 import gdown
+from werkzeug.security import generate_password_hash
 
 BASE_DIR: Path = Path(__file__).resolve().parent
 DATA_DIR: Path = BASE_DIR / "data"
@@ -49,6 +52,7 @@ DATASET_DIRS: dict[str, Path] = {
     "cropped": DATA_DIR / "UTKFace",
     "wild": DATA_DIR / "in-the-wild",
 }
+ADMIN_ACCOUNTS_FILE: str = "admins.json"
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +63,53 @@ DATASET_DIRS: dict[str, Path] = {
 @click.group()
 def cli() -> None:
     """AgeGuesser management commands."""
+
+
+def _admins_file_path() -> Path:
+    return DATA_DIR / ADMIN_ACCOUNTS_FILE
+
+
+@cli.command("create-admin")
+@click.option(
+    "--username",
+    prompt=True,
+    help="Admin username",
+)
+@click.option(
+    "--password",
+    prompt=True,
+    hide_input=True,
+    confirmation_prompt=True,
+    help="Admin password",
+)
+def create_admin(username: str, password: str) -> None:
+    """Create or update an admin account for dataset curation."""
+    username = username.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.\-]{3,64}", username):
+        raise click.ClickException(
+            "Username must be 3-64 chars and only contain letters, numbers, ., _, -"
+        )
+    if len(password) < 8:
+        raise click.ClickException("Password must be at least 8 characters long")
+
+    path = _admins_file_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    admins: dict[str, str] = {}
+    if path.is_file():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                admins = {
+                    str(name): str(password_hash)
+                    for name, password_hash in payload.items()
+                }
+        except (OSError, json.JSONDecodeError):
+            admins = {}
+
+    admins[username] = generate_password_hash(password)
+    path.write_text(json.dumps(admins, indent=2, sort_keys=True), encoding="utf-8")
+    click.echo(f"✓ Admin account ready: {username}")
 
 
 @cli.command()

@@ -6,10 +6,12 @@ import io
 import tarfile
 import zipfile
 import shutil
+import json
 from pathlib import Path
 import pytest
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
+from werkzeug.security import check_password_hash
 
 import manage
 from manage import cli, _extract_archive, _fix_swapped_dataset_dirs
@@ -289,7 +291,33 @@ class TestDownloadCli:
                  "cropped": tmp_path / "UTKFace",
                  "wild": tmp_path / "in-the-wild",
              }), \
-             patch("manage.gdown.download"), \
-             patch("manage._extract_archive"):
+              patch("manage.gdown.download"), \
+              patch("manage._extract_archive"):
             result = runner.invoke(cli, ["download", "--datasets", "cropped"])
             assert "cropped" in result.output.lower()
+
+
+class TestCreateAdminCli:
+    def test_create_admin_writes_hashed_password(self, runner, tmp_path):
+        with patch.object(manage, "DATA_DIR", tmp_path):
+            result = runner.invoke(
+                cli,
+                ["create-admin", "--username", "admin_user", "--password", "supersecret"],
+            )
+            assert result.exit_code == 0
+
+        admins_file = tmp_path / "admins.json"
+        assert admins_file.exists()
+        payload = json.loads(admins_file.read_text(encoding="utf-8"))
+        assert "admin_user" in payload
+        assert payload["admin_user"] != "supersecret"
+        assert check_password_hash(payload["admin_user"], "supersecret")
+
+    def test_create_admin_rejects_short_password(self, runner, tmp_path):
+        with patch.object(manage, "DATA_DIR", tmp_path):
+            result = runner.invoke(
+                cli,
+                ["create-admin", "--username", "admin_user", "--password", "short"],
+            )
+            assert result.exit_code != 0
+            assert "at least 8 characters" in result.output
