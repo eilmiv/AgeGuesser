@@ -226,8 +226,8 @@ def _fix_swapped_dataset_dirs() -> None:
     cropped_has_chip_files = _contains_chip_files(cropped_dir)
     wild_has_chip_files = _contains_chip_files(wild_dir)
 
-    # Swap only when cropped has chip-style files and wild does not.
-    should_swap = cropped_has_chip_files and not wild_has_chip_files
+    # Swap only when wild has chip-style files and cropped does not.
+    should_swap = wild_has_chip_files and not cropped_has_chip_files
     if not should_swap:
         return
 
